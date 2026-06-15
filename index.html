@@ -89,6 +89,9 @@
   .snake-item .st{color:var(--muted);font-size:11px;}
   .snake-item .x{margin-left:auto;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px;}
   .snake-item .x:hover{color:var(--red);}
+  .dot-pick{flex-shrink:0;}
+  .dot-pick:hover .dot{box-shadow:0 0 0 2px var(--accent);}
+  .snake-item .nm[data-rename]:hover{text-decoration:underline dotted;}
   /* center */
   .controls{display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:12px;flex-wrap:wrap;}
   .controls button{
@@ -139,7 +142,14 @@
     <span class="spacer"></span>
     <button id="btn-rules">📖 游戏基础规则</button>
     <button id="btn-spec">📋 上传 JS 规范</button>
+    <button id="btn-analysis">📊 数据分析</button>
+    <button id="btn-lesson">📚 经验库</button>
+    <button id="btn-llm-cfg">⚙️ 配置大模型</button>
     <button id="btn-clear-rank">🗑️ 清空积分榜</button>
+    <button id="btn-export-backup" title="导出全部数据为JSON文件">💾 导出存档</button>
+    <button id="btn-import-backup" title="从JSON文件导入恢复">📂 导入存档</button>
+    <input type="file" id="import-file" accept=".json" style="display:none;">
+    <button id="btn-reset-roster" title="清除所有上传/进化的蛇，恢复初始陪练">♻️ 重置擂台</button>
   </div>
 
   <div class="layout">
@@ -147,8 +157,9 @@
     <div class="panel" id="left-panel">
       <h2>擂台选手</h2>
       <div class="tabs">
-        <button class="active" data-tab="single">📤 单条上传</button>
-        <button data-tab="batch">📦 批量上传</button>
+        <button class="active" data-tab="single">📤 上传</button>
+        <button data-tab="zh">✍️ 中文造蛇</button>
+        <button data-tab="batch">📦 批量</button>
       </div>
 
       <div id="tab-single">
@@ -169,6 +180,25 @@
           <textarea id="snake-code" placeholder="// 在此粘贴你的 AI 决策代码，详见「上传 JS 规范」"></textarea>
         </div>
         <button class="btn-primary" id="btn-add">＋ 添加到擂台</button>
+      </div>
+
+      <div id="tab-zh" style="display:none;">
+        <p class="muted" style="line-height:1.6;margin-bottom:8px;">
+          用<b>中文</b>描述你的策略，AI 会把它写成完整的 JS 决策代码——门槛低，但上限不封顶。
+        </p>
+        <textarea id="zh-desc" style="min-height:110px;" placeholder="例如：优先抢蟠桃回血，坚决避开毒蜘蛛；时刻用 flood-fill 算可逃生空间，不把自己困死；遇到比我长的蛇主动避让头碰头，遇到比我短的蛇可以正面拦截。"></textarea>
+        <div class="field" style="margin-top:8px;">
+          <label>蛇名</label>
+          <input type="text" id="zh-name" placeholder="可选，默认自动命名">
+        </div>
+        <div class="field">
+          <label>颜色</label>
+          <input type="color" id="zh-color" value="#34d399">
+        </div>
+        <button class="btn-primary" id="btn-zh-create">✨ 生成提示词 → 造蛇</button>
+        <p class="muted" style="margin-top:8px;font-size:11px;line-height:1.5;">
+          生成后可一键复制给任意 AI，或点「⚡ 自动调用大模型」（需先配置）。
+        </p>
       </div>
 
       <div id="tab-batch" style="display:none;">
@@ -224,6 +254,21 @@
       <div id="select-list"></div>
       <button class="btn-primary" id="btn-single-match" style="margin-top:8px;">▶ 开始单场</button>
 
+      <h3>🍽️ 食物比例 <span class="link" id="food-reset" style="float:right;">恢复默认</span></h3>
+      <p class="muted" style="line-height:1.5;margin-bottom:8px;font-size:11px;">
+        三种食物的生成权重（按比例归一化）。单场/批量场均生效，须在开局前设定。
+      </p>
+      <div class="field">
+        <label style="width:auto;">🥟包子</label>
+        <input type="number" id="food-bun" class="small-input" style="width:54px;" value="55" min="0" max="100">
+        <label style="width:auto;">🍑蟠桃</label>
+        <input type="number" id="food-peach" class="small-input" style="width:54px;" value="15" min="0" max="100">
+        <label style="width:auto;">🕷️毒</label>
+        <input type="number" id="food-spider" class="small-input" style="width:54px;" value="30" min="0" max="100">
+      </div>
+      <div id="food-ratio-bar" style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-bottom:4px;"></div>
+      <div id="food-ratio-label" class="muted" style="font-size:11px;margin-bottom:4px;"></div>
+
       <h3>批量场（全随机种子）</h3>
       <p class="muted" style="line-height:1.6;margin-bottom:8px;">
         勾选的蛇互打 N 场，结束后出现总榜。
@@ -263,6 +308,69 @@
       <span class="close" data-close>×</span>
       <h2>📋 上传 JS 规范</h2>
       <div id="spec-content"></div>
+    </div>
+  </div>
+  <!-- Evolve/Create Prompt Modal -->
+  <div class="modal-mask" id="modal-eo">
+    <div class="modal">
+      <span class="close" data-close>×</span>
+      <h2 id="eo-title">提示词</h2>
+      <div id="eo-body"></div>
+    </div>
+  </div>
+  <!-- Diagnostic Report Modal -->
+  <div class="modal-mask" id="modal-diag">
+    <div class="modal">
+      <span class="close" data-close>×</span>
+      <h2>📈 批量赛诊断报告</h2>
+      <div id="diag-body"></div>
+    </div>
+  </div>
+  <!-- Analysis Modal -->
+  <div class="modal-mask" id="modal-analysis">
+    <div class="modal">
+      <span class="close" data-close>×</span>
+      <h2>📊 全局对战数据分析
+        <span class="link" id="pool-export" style="float:right;margin-left:12px;">📥 导出数据池</span>
+        <span class="link" id="pool-clear" style="float:right;color:var(--red);">🗑️ 清空</span>
+      </h2>
+      <p class="muted" style="margin-bottom:12px;">汇总所有对局的累计数据，自动定位最该进化的蛇。可直接「基于全量数据进化」——比单场诊断更能抓根因。</p>
+      <div id="analysis-body"></div>
+    </div>
+  </div>
+  <!-- Lesson Book Modal -->
+  <div class="modal-mask" id="modal-lesson">
+    <div class="modal">
+      <span class="close" data-close>×</span>
+      <h2>📚 进化经验库
+        <span class="link" id="lesson-export" style="float:right;margin-left:12px;">📥 导出 MD</span>
+        <span class="link" id="lesson-clear" style="float:right;color:var(--red);">🗑️ 清空</span>
+      </h2>
+      <p class="muted" style="margin-bottom:12px;">每次「一键进化」时 AI 总结的改进意见与经验规律都会自动沉淀在这里（保存于本浏览器），可导出为 Markdown。</p>
+      <div id="lesson-body"></div>
+    </div>
+  </div>
+  <!-- LLM Config Modal -->
+  <div class="modal-mask" id="modal-llm">
+    <div class="modal" style="max-width:480px;">
+      <span class="close" data-close>×</span>
+      <h2>⚙️ 配置大模型（自动模式）</h2>
+      <p class="muted" style="line-height:1.6;margin-bottom:12px;">
+        配置后，「中文造蛇」「一键进化」可点「⚡ 自动调用大模型」直接拿代码，无需手动复制。<br>
+        不配置也能用——走「📋 复制提示词」手动模式即可。<br>
+        <b style="color:var(--yellow)">注意：</b>Key 仅存在本浏览器 localStorage，请勿在公共设备使用。
+      </p>
+      <div class="field"><label style="width:64px;">接口地址</label>
+        <input type="text" id="cfg-baseurl" placeholder="https://api.deepseek.com/v1"></div>
+      <div class="field"><label style="width:64px;">模型</label>
+        <input type="text" id="cfg-model" placeholder="deepseek-chat"></div>
+      <div class="field"><label style="width:64px;">API Key</label>
+        <input type="text" id="cfg-apikey" placeholder="sk-..."></div>
+      <p class="muted" style="font-size:11px;margin:6px 0 10px;">
+        常用：DeepSeek → <code>https://api.deepseek.com/v1</code> + <code>deepseek-chat</code>；
+        兼容任何 OpenAI 格式接口（通义/Kimi/本地 Ollama 等）。部分接口浏览器直连会被 CORS 拦截，公开平台建议用后端代理地址。
+      </p>
+      <button class="btn-primary" id="cfg-save">💾 保存配置</button>
     </div>
   </div>
 
@@ -322,6 +430,8 @@ class SnakeGame {
     this.foods = [];        // {x,y,type}
     this.gameOver = false;
     this.deathLog = [];     // 死亡顺序记录
+    // 食物比例权重 {bun,peach,spider}，缺省走默认值
+    this.foodWeights = opts.foodWeights || { bun:55, peach:15, spider:30 };
     this.snakes = players.map((p,i)=> this._spawn(p,i,players.length));
     this._fillFood();
   }
@@ -355,6 +465,7 @@ class SnakeGame {
       alive: true,
       deathTurn: -1, deathReason: '',
       foodEaten: 0,
+      bunEaten: 0, peachEaten: 0, spiderEaten: 0,
       maxLen: INIT_LEN,
       survivedTurns: 0,
       lastError: null,
@@ -379,12 +490,18 @@ class SnakeGame {
     const cells = this._emptyCells();
     if(cells.length===0) return;
     const c = cells[Math.floor(this.rng()*cells.length)];
-    // 食物类型概率: 包子55% 蟠桃15% 毒蜘蛛30%
-    const r = this.rng();
+    // 食物类型按配置权重生成（归一化后轮盘选择）
+    const w = this.foodWeights;
+    const wb = Math.max(0,w.bun||0), wp = Math.max(0,w.peach||0), ws = Math.max(0,w.spider||0);
+    let total = wb+wp+ws;
     let type = 'bun';
-    if(r < 0.30) type='spider';
-    else if(r < 0.45) type='peach';
-    else type='bun';
+    if(total<=0){ type='bun'; }
+    else {
+      const r = this.rng()*total;
+      if(r < wb) type='bun';
+      else if(r < wb+wp) type='peach';
+      else type='spider';
+    }
     this.foods.push({x:c.x, y:c.y, type});
   }
 
@@ -501,6 +618,9 @@ class SnakeGame {
         else s.hp = s.hp + ft.hp;
         if(s.hp>100) s.hp=100;
         s.foodEaten++;
+        if(f.type==='bun') s.bunEaten++;
+        else if(f.type==='peach') s.peachEaten++;
+        else if(f.type==='spider') s.spiderEaten++;
         // 额外增长（蟠桃 +2 更多节，复制尾巴）
         let extra = grewExtra[s.id]||0;
         while(extra-->0){
@@ -616,6 +736,7 @@ class SnakeGame {
         alive:s.alive, hp:Math.max(0,s.hp),
         length:s.body.length, maxLen:s.maxLen,
         foodEaten:s.foodEaten, survivedTurns:s.survivedTurns,
+        bunEaten:s.bunEaten, peachEaten:s.peachEaten, spiderEaten:s.spiderEaten,
         deathReason:s.deathReason||'存活', deathTurn:s.deathTurn,
         _placeTurn: placeKilledTurn,
       };
@@ -781,6 +902,270 @@ const BUILTIN_AIS = {
     }
     return bestD;
   },
+  // 猎手Pro：flood-fill空间评估 + BFS抢食 + 躲头碰头（会搜索的强力示例）
+  hunterPro: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp;
+    var DIRS={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    var OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var blocked={},tails={},enemyHeads=[];
+    for(var i=0;i<state.snakes.length;i++){
+      var s=state.snakes[i]; if(!s.alive)continue;
+      for(var j=0;j<s.body.length;j++)blocked[K(s.body[j].x,s.body[j].y)]=true;
+      var tl=s.body[s.body.length-1]; tails[K(tl.x,tl.y)]=true;
+      if(s.id!==self.id)enemyHeads.push({x:s.body[0].x,y:s.body[0].y,len:s.length});
+    }
+    var headDanger={};
+    for(var e=0;e<enemyHeads.length;e++){var eh=enemyHeads[e];if(eh.len>=myLen){for(var d in DIRS){headDanger[K(eh.x+DIRS[d].x,eh.y+DIRS[d].y)]=true;}}}
+    function inB(x,y){return x>=0&&y>=0&&x<W&&y<H;}
+    function passable(x,y,allowTail){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k]){if(allowTail&&tails[k])return true;return false;}return true;}
+    function floodSpace(sx,sy){if(!passable(sx,sy,true))return 0;var seen={},stack=[[sx,sy]],c=0,cap=W*H;while(stack.length&&c<cap){var cur=stack.pop(),cx=cur[0],cy=cur[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;c++;for(var d in DIRS){var ax=cx+DIRS[d].x,ay=cy+DIRS[d].y;if(!seen[K(ax,ay)]&&passable(ax,ay,true))stack.push([ax,ay]);}}return c;}
+    function bfsToFood(targets){var visited={};visited[K(head.x,head.y)]=true;var queue=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;while(qi<queue.length){var node=queue[qi++];for(var d in DIRS){var nx=node.x+DIRS[d].x,ny=node.y+DIRS[d].y,nk=K(nx,ny);if(visited[nk])continue;if(!passable(nx,ny,true))continue;var fs=node.first||d;if(node.dist===0&&headDanger[nk])continue;visited[nk]=true;if(targets[nk])return{firstDir:fs,dist:node.dist+1};queue.push({x:nx,y:ny,first:fs,dist:node.dist+1});}}return null;}
+    var foodTargets={},bestFood=null,bestScore=-1e9;
+    for(var f=0;f<state.foods.length;f++){var fd=state.foods[f];if(fd.type==='spider')continue;var dist=Math.abs(fd.x-head.x)+Math.abs(fd.y-head.y);var val=fd.type==='peach'?100:40;var hb=myHp<40?2:1;var sc=val*hb-dist*3;foodTargets[K(fd.x,fd.y)]=true;if(sc>bestScore){bestScore=sc;bestFood=fd;}}
+    var prim={};if(bestFood)prim[K(bestFood.x,bestFood.y)]=true;
+    var pathFood=bfsToFood(prim);if(!pathFood)pathFood=bfsToFood(foodTargets);
+    var cand=[];
+    for(var d in DIRS){if(d===OPP[self.dir])continue;var nx=head.x+DIRS[d].x,ny=head.y+DIRS[d].y,nk=K(nx,ny);if(!passable(nx,ny,true))continue;var score=0;var space=floodSpace(nx,ny);score+=space*4;if(space<myLen+1)score-=500;if(headDanger[nk])score-=300;if(pathFood&&pathFood.firstDir===d){score+=(myHp<40?120:60);score-=pathFood.dist*2;}var onFood=false,onSpider=false;for(var ff=0;ff<state.foods.length;ff++){if(state.foods[ff].x===nx&&state.foods[ff].y===ny){if(state.foods[ff].type==='spider')onSpider=true;else onFood=true;}}if(onFood)score+=50;if(onSpider)score-=200;var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.5;cand.push({dir:d,score:score});}
+    if(cand.length===0){var fb=self.dir,bsp=-1;for(var d2 in DIRS){if(d2===OPP[self.dir])continue;var sp=floodSpace(head.x+DIRS[d2].x,head.y+DIRS[d2].y);if(sp>bsp){bsp=sp;fb=d2;}}return fb;}
+    cand.sort(function(a,b){return b.score-a.score;});
+    return cand[0].dir;
+  },
+  // 猎手Pro+：在Pro基础上加 近距围堵短蛇 + 决赛圈贴墙续命 + HP感知激进度 + 通道惩罚
+  hunterProPlus: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp;
+    var DIRS={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    var OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var blocked={},tails={},enemies=[];
+    for(var i=0;i<state.snakes.length;i++){var s=state.snakes[i];if(!s.alive)continue;for(var j=0;j<s.body.length;j++)blocked[K(s.body[j].x,s.body[j].y)]=true;var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;if(s.id!==self.id)enemies.push({x:s.body[0].x,y:s.body[0].y,len:s.length});}
+    var enemyCount=enemies.length;
+    var headDanger={},killZone={};
+    for(var e=0;e<enemies.length;e++){var en=enemies[e];for(var d in DIRS){var nx=en.x+DIRS[d].x,ny=en.y+DIRS[d].y;if(en.len>=myLen)headDanger[K(nx,ny)]=true;else killZone[K(nx,ny)]=true;}}
+    function inB(x,y){return x>=0&&y>=0&&x<W&&y<H;}
+    function passable(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k]){if(t&&tails[k])return true;return false;}return true;}
+    function floodSpace(sx,sy){if(!passable(sx,sy,true))return 0;var seen={},stack=[[sx,sy]],c=0,cap=W*H;while(stack.length&&c<cap){var cur=stack.pop(),cx=cur[0],cy=cur[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;c++;for(var d in DIRS){var ax=cx+DIRS[d].x,ay=cy+DIRS[d].y;if(!seen[K(ax,ay)]&&passable(ax,ay,true))stack.push([ax,ay]);}}return c;}
+    function openNb(x,y){var n=0;for(var d in DIRS){if(passable(x+DIRS[d].x,y+DIRS[d].y,true))n++;}return n;}
+    function bfsTo(t){var v={};v[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;while(qi<q.length){var nd=q[qi++];for(var d in DIRS){var nx=nd.x+DIRS[d].x,ny=nd.y+DIRS[d].y,nk=K(nx,ny);if(v[nk]||!passable(nx,ny,true))continue;var fs=nd.first||d;if(nd.dist===0&&headDanger[nk])continue;v[nk]=true;if(t[nk])return{firstDir:fs,dist:nd.dist+1};q.push({x:nx,y:ny,first:fs,dist:nd.dist+1});}}return null;}
+    var endgame=(enemyCount===1);
+    var huntTarget=null,huntDist=1e9;
+    for(var k=0;k<enemies.length;k++){var e0=enemies[k];if(e0.len<=myLen-2&&myHp>45){var dd=Math.abs(e0.x-head.x)+Math.abs(e0.y-head.y);if(dd<huntDist){huntDist=dd;huntTarget=e0;}}}
+    var canHunt=huntTarget&&huntDist<=4;
+    var aggr=myHp>=70?1.2:(myHp>=40?1.0:0.6);
+    var foodTargets={},bestFood=null,bf=-1e9;
+    for(var f=0;f<state.foods.length;f++){var fd=state.foods[f];if(fd.type==='spider')continue;var dist=Math.abs(fd.x-head.x)+Math.abs(fd.y-head.y);var val=fd.type==='peach'?100:40;var hg=myHp<40?2.2:1;var sc=val*hg-dist*3;foodTargets[K(fd.x,fd.y)]=true;if(sc>bf){bf=sc;bestFood=fd;}}
+    var prim={};if(bestFood)prim[K(bestFood.x,bestFood.y)]=true;
+    var pathFood=bfsTo(prim)||bfsTo(foodTargets);
+    var pathHunt=canHunt?bfsTo(killZone):null;
+    var cand=[];
+    for(var d in DIRS){if(d===OPP[self.dir])continue;var nx=head.x+DIRS[d].x,ny=head.y+DIRS[d].y,nk=K(nx,ny);if(!passable(nx,ny,true))continue;var score=0;var space=floodSpace(nx,ny);var sw=endgame?5:4;score+=space*sw;if(space<myLen+1)score-=600;var nb=openNb(nx,ny);if(nb<=1)score-=80;if(headDanger[nk])score-=350;if(canHunt&&space>=myLen+2){if(killZone[nk])score+=120*aggr;if(pathHunt&&pathHunt.firstDir===d)score+=60*aggr-pathHunt.dist*4;}if(pathFood&&pathFood.firstDir===d){var fw=(myHp<40?130:60)*aggr;if(endgame)fw*=0.6;score+=fw-pathFood.dist*2;}var onFood=false,onSpider=false;for(var ff=0;ff<state.foods.length;ff++){if(state.foods[ff].x===nx&&state.foods[ff].y===ny){if(state.foods[ff].type==='spider')onSpider=true;else onFood=true;}}if(onFood)score+=50*aggr;if(onSpider)score-=220;var ed=Math.min(nx,ny,W-1-nx,H-1-ny);if(endgame&&myLen>8){score+=(3-Math.min(ed,3))*5;}else{var cdd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cdd*0.5;}cand.push({dir:d,score:score});}
+    if(cand.length===0){var fb=self.dir,bsp=-1;for(var d2 in DIRS){if(d2===OPP[self.dir])continue;var sp=floodSpace(head.x+DIRS[d2].x,head.y+DIRS[d2].y);if(sp>bsp){bsp=sp;fb=d2;}}return fb;}
+    cand.sort(function(a,b){return b.score-a.score;});
+    return cand[0].dir;
+  },
+  // 状态机猎手FSM v3：v2基础上强化头碰头预测(剔除敌反向格+等长同归于尽躲避+致命禁区600/700惩罚)+避免抢敌可达危险食物格
+  hunterFSM: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp;
+    var DIRS={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    var OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var blocked={},tails={},enemies=[],enemyBodyNear={};
+    for(var i=0;i<state.snakes.length;i++){
+      var s=state.snakes[i];if(!s.alive)continue;
+      for(var j=0;j<s.body.length;j++)blocked[K(s.body[j].x,s.body[j].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      if(s.id!==self.id){
+        enemies.push({x:s.body[0].x,y:s.body[0].y,len:s.length,dir:s.dir});
+        for(var b=0;b<s.body.length;b++){for(var db in DIRS){enemyBodyNear[K(s.body[b].x+DIRS[db].x,s.body[b].y+DIRS[db].y)]=true;}}
+      }
+    }
+    // 头碰头预测：敌方下一步可达格(排除其反向)。len>=myLen=>致命禁区；len<myLen=>可猎杀
+    var dangerStep1={},killZone={},contestEqual={};
+    for(var e=0;e<enemies.length;e++){
+      var en=enemies[e];
+      for(var d in DIRS){
+        if(d===OPP[en.dir])continue;             // 敌不会反向，剔除该格降低误判
+        var ax=en.x+DIRS[d].x,ay=en.y+DIRS[d].y,ek=K(ax,ay);
+        if(en.len>myLen){dangerStep1[ek]=true;}
+        else if(en.len===myLen){dangerStep1[ek]=true;contestEqual[ek]=true;} // 等长对撞=同归于尽,也躲
+        else {killZone[ek]=true;}
+      }
+    }
+    function inB(x,y){return x>=0&&y>=0&&x<W&&y<H;}
+    function passable(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k]){if(t&&tails[k])return true;return false;}return true;}
+    function floodSpace(sx,sy){if(!passable(sx,sy,true))return 0;var seen={},stk=[[sx,sy]],c=0,cap=W*H;while(stk.length&&c<cap){var cur=stk.pop(),cx=cur[0],cy=cur[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;c++;for(var d in DIRS){var nx=cx+DIRS[d].x,ny=cy+DIRS[d].y;if(!seen[K(nx,ny)]&&passable(nx,ny,true))stk.push([nx,ny]);}}return c;}
+    function openNb(x,y){var n=0;for(var d in DIRS){if(passable(x+DIRS[d].x,y+DIRS[d].y,true))n++;}return n;}
+    function bfsTo(t){var v={};v[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;while(qi<q.length){var nd=q[qi++];for(var d in DIRS){var nx=nd.x+DIRS[d].x,ny=nd.y+DIRS[d].y,nk=K(nx,ny);if(v[nk]||!passable(nx,ny,true))continue;var fs=nd.first||d;if(nd.dist===0&&dangerStep1[nk])continue;v[nk]=true;if(t[nk])return{firstDir:fs,dist:nd.dist+1};q.push({x:nx,y:ny,first:fs,dist:nd.dist+1});}}return null;}
+    var phase=myLen<8?'young':(myLen<=13?'grow':'mature');
+    var hpTier=myHp>=50?'healthy':(myHp>=25?'hungry':'critical');
+    var spaceThreshold=phase==='young'?(myLen+4):phase==='grow'?Math.ceil(myLen*1.3):Math.ceil(myLen*1.6);
+    var softThreshold=spaceThreshold+Math.ceil(myLen*0.4);
+    var hungerBoost=myHp<55?(1+(55-myHp)/22):1;       // 续命更早(55)且更陡,治62%饿死
+    var P;
+    if(hpTier==='critical'){P={space:phase==='mature'?6:4.5,food:260,hunt:0,edge:phase==='mature'?12:4};}
+    else if(phase==='young'){P=hpTier==='healthy'?{space:3,food:170,hunt:0,edge:2}:{space:3.5,food:210,hunt:0,edge:3};}
+    else if(phase==='grow'){P=hpTier==='healthy'?{space:4,food:120,hunt:0,edge:5}:{space:4.5,food:180,hunt:0,edge:6};}
+    else{P=hpTier==='healthy'?{space:6,food:70,hunt:1,edge:13}:{space:6.5,food:130,hunt:0,edge:13};}
+    P.food=Math.round(P.food*hungerBoost);
+    var huntTarget=null,huntDist=1e9;
+    if(P.hunt&&hpTier==='healthy'&&phase==='mature'){for(var k=0;k<enemies.length;k++){if(enemies[k].len<=myLen-3){var dq=Math.abs(enemies[k].x-head.x)+Math.abs(enemies[k].y-head.y);if(dq<huntDist){huntDist=dq;huntTarget=enemies[k];}}}}
+    var canHunt=huntTarget&&huntDist<=2;
+    var foodTargets={},bestFood=null,bfs=-1e9;
+    for(var f=0;f<state.foods.length;f++){var fd=state.foods[f];if(fd.type==='spider')continue;var dist=Math.abs(fd.x-head.x)+Math.abs(fd.y-head.y);var val=fd.type==='peach'?100:40;var distPen=hpTier==='critical'?0:(hpTier==='hungry'?1:1.6);var sc=val*hungerBoost-dist*distPen;foodTargets[K(fd.x,fd.y)]=true;if(sc>bfs){bfs=sc;bestFood=fd;}}
+    var prim={};if(bestFood)prim[K(bestFood.x,bestFood.y)]=true;
+    var pathFood=bfsTo(prim)||bfsTo(foodTargets);
+    var pathHunt=canHunt?bfsTo(killZone):null;
+    var cand=[];
+    for(var d in DIRS){
+      if(d===OPP[self.dir])continue;
+      var nx=head.x+DIRS[d].x,ny=head.y+DIRS[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      var score=0;
+      var space=floodSpace(nx,ny);
+      score+=space*P.space;
+      if(space<spaceThreshold)score-=10000;
+      else if(space<softThreshold)score-=(softThreshold-space)*60;
+      if(openNb(nx,ny)<=1)score-=150;
+      // 头碰头：致命禁区大额惩罚(治23%头碰头)；争食格也要小心
+      if(dangerStep1[nk]){
+        var safeAround=openNb(nx,ny);
+        score-= (contestEqual[nk]?700:600);     // 等长同归于尽更不值,扣更多
+        if(safeAround<=2)score-=300;             // 危险格+少出口=死路一条
+      }
+      if(enemyBodyNear[nk])score-=100;
+      if(pathFood&&pathFood.firstDir===d){score+=P.food-pathFood.dist*(hpTier==='critical'?0.5:(hpTier==='hungry'?1:1.8));}
+      var onFood=false,onSpider=false;
+      for(var ff=0;ff<state.foods.length;ff++){if(state.foods[ff].x===nx&&state.foods[ff].y===ny){if(state.foods[ff].type==='spider')onSpider=true;else onFood=true;}}
+      if(onFood&&!dangerStep1[nk])score+=P.food*0.8;   // 抢食加强,但不抢"敌也能到"的危险食物格
+      if(onSpider)score-=400;                            // 避毒加重(误吃22次→压低)
+      if(canHunt&&space>=softThreshold){if(killZone[nk])score+=100*P.hunt;if(pathHunt&&pathHunt.firstDir===d)score+=50*P.hunt-pathHunt.dist*4;}
+      var ed=Math.min(nx,ny,W-1-nx,H-1-ny);
+      if(phase==='mature'){if(ed<=2)score-=(3-ed)*P.edge;}
+      else{var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.4;}
+      cand.push({dir:d,score:score});
+    }
+    if(cand.length===0){var fb=self.dir,bsp=-1;for(var dz in DIRS){if(dz===OPP[self.dir])continue;var sp=floodSpace(head.x+DIRS[dz].x,head.y+DIRS[dz].y);if(sp>bsp){bsp=sp;fb=dz;}}return fb;}
+    cand.sort(function(a,b){return b.score-a.score;});
+    return cand[0].dir;
+  },
+  // 围猎封锁Siege：FSMv3 + 残局(1v1)对手空间博弈封锁(最大化我方空间-对手空间,主动把对手挤进死空间)
+  hunterSiege: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp;
+    var DIRS={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    var OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var blocked={},tails={},enemies=[],enemyBodyNear={},aliveEnemies=[];
+    for(var i=0;i<state.snakes.length;i++){
+      var s=state.snakes[i];if(!s.alive)continue;
+      for(var j=0;j<s.body.length;j++)blocked[K(s.body[j].x,s.body[j].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      if(s.id!==self.id){
+        enemies.push({x:s.body[0].x,y:s.body[0].y,len:s.length,dir:s.dir});
+        aliveEnemies.push(s);
+        for(var b=0;b<s.body.length;b++){for(var db in DIRS){enemyBodyNear[K(s.body[b].x+DIRS[db].x,s.body[b].y+DIRS[db].y)]=true;}}
+      }
+    }
+    var dangerStep1={},killZone={},contestEqual={};
+    for(var e=0;e<enemies.length;e++){
+      var en=enemies[e];
+      for(var d in DIRS){
+        if(d===OPP[en.dir])continue;
+        var ax=en.x+DIRS[d].x,ay=en.y+DIRS[d].y,ek=K(ax,ay);
+        if(en.len>myLen){dangerStep1[ek]=true;}
+        else if(en.len===myLen){dangerStep1[ek]=true;contestEqual[ek]=true;}
+        else {killZone[ek]=true;}
+      }
+    }
+    function inB(x,y){return x>=0&&y>=0&&x<W&&y<H;}
+    function passable(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k]){if(t&&tails[k])return true;return false;}return true;}
+    // flood：从(sx,sy)可达空间大小，可传入额外阻挡集 extra（模拟我方新蛇头占位）
+    function floodSpace(sx,sy,extra){if(!passable(sx,sy,true))return 0;if(extra&&extra[K(sx,sy)])return 0;var seen={},stk=[[sx,sy]],c=0,cap=W*H;while(stk.length&&c<cap){var cur=stk.pop(),cx=cur[0],cy=cur[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;c++;for(var d in DIRS){var nx=cx+DIRS[d].x,ny=cy+DIRS[d].y,nkk=K(nx,ny);if(!seen[nkk]&&passable(nx,ny,true)&&!(extra&&extra[nkk]))stk.push([nx,ny]);}}return c;}
+    function openNb(x,y){var n=0;for(var d in DIRS){if(passable(x+DIRS[d].x,y+DIRS[d].y,true))n++;}return n;}
+    function bfsTo(t){var v={};v[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;while(qi<q.length){var nd=q[qi++];for(var d in DIRS){var nx=nd.x+DIRS[d].x,ny=nd.y+DIRS[d].y,nk=K(nx,ny);if(v[nk]||!passable(nx,ny,true))continue;var fs=nd.first||d;if(nd.dist===0&&dangerStep1[nk])continue;v[nk]=true;if(t[nk])return{firstDir:fs,dist:nd.dist+1};q.push({x:nx,y:ny,first:fs,dist:nd.dist+1});}}return null;}
+    // 对手当前可达空间（用于残局封锁评估：把"我方候选新头"作为额外阻挡，看能压缩多少对手空间）
+    function enemySpace(en,extra){
+      var best=0;
+      for(var d in DIRS){
+        if(d===OPP[en.dir])continue;
+        var nx=en.x+DIRS[d].x,ny=en.y+DIRS[d].y;
+        if(!passable(nx,ny,true))continue;
+        if(extra&&extra[K(nx,ny)])continue;          // 我方新头堵住了这一步
+        var sp=floodSpace(nx,ny,extra);
+        if(sp>best)best=sp;
+      }
+      return best;
+    }
+    var phase=myLen<8?'young':(myLen<=13?'grow':'mature');
+    var hpTier=myHp>=50?'healthy':(myHp>=25?'hungry':'critical');
+    var spaceThreshold=phase==='young'?(myLen+4):phase==='grow'?Math.ceil(myLen*1.3):Math.ceil(myLen*1.6);
+    var softThreshold=spaceThreshold+Math.ceil(myLen*0.4);
+    var hungerBoost=myHp<55?(1+(55-myHp)/22):1;
+    // 残局判定：只剩1个对手 → 启用空间博弈封锁
+    var endgame=(aliveEnemies.length===1);
+    var soleEnemy=endgame?enemies[0]:null;
+    var P;
+    if(hpTier==='critical'){P={space:phase==='mature'?6:4.5,food:260,hunt:0,edge:phase==='mature'?12:4};}
+    else if(phase==='young'){P=hpTier==='healthy'?{space:3,food:170,hunt:0,edge:2}:{space:3.5,food:210,hunt:0,edge:3};}
+    else if(phase==='grow'){P=hpTier==='healthy'?{space:4,food:120,hunt:0,edge:5}:{space:4.5,food:180,hunt:0,edge:6};}
+    else{P=hpTier==='healthy'?{space:6,food:70,hunt:1,edge:13}:{space:6.5,food:130,hunt:0,edge:13};}
+    P.food=Math.round(P.food*hungerBoost);
+    var huntTarget=null,huntDist=1e9;
+    if(P.hunt&&hpTier==='healthy'&&phase==='mature'){for(var k=0;k<enemies.length;k++){if(enemies[k].len<=myLen-3){var dq=Math.abs(enemies[k].x-head.x)+Math.abs(enemies[k].y-head.y);if(dq<huntDist){huntDist=dq;huntTarget=enemies[k];}}}}
+    var canHunt=huntTarget&&huntDist<=2;
+    var foodTargets={},bestFood=null,bfs=-1e9;
+    for(var f=0;f<state.foods.length;f++){var fd=state.foods[f];if(fd.type==='spider')continue;var dist=Math.abs(fd.x-head.x)+Math.abs(fd.y-head.y);var val=fd.type==='peach'?100:40;var distPen=hpTier==='critical'?0:(hpTier==='hungry'?1:1.6);var sc=val*hungerBoost-dist*distPen;foodTargets[K(fd.x,fd.y)]=true;if(sc>bfs){bfs=sc;bestFood=fd;}}
+    var prim={};if(bestFood)prim[K(bestFood.x,bestFood.y)]=true;
+    var pathFood=bfsTo(prim)||bfsTo(foodTargets);
+    var pathHunt=canHunt?bfsTo(killZone):null;
+    // 残局下对手当前的基线空间（用于比较）
+    var baseEnemySpace=endgame?enemySpace(soleEnemy,null):0;
+    var cand=[];
+    for(var d in DIRS){
+      if(d===OPP[self.dir])continue;
+      var nx=head.x+DIRS[d].x,ny=head.y+DIRS[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      var score=0;
+      var space=floodSpace(nx,ny);
+      score+=space*P.space;
+      if(space<spaceThreshold)score-=10000;
+      else if(space<softThreshold)score-=(softThreshold-space)*60;
+      if(openNb(nx,ny)<=1)score-=150;
+      if(dangerStep1[nk]){var safeAround=openNb(nx,ny);score-=(contestEqual[nk]?700:600);if(safeAround<=2)score-=300;}
+      if(enemyBodyNear[nk])score-=100;
+      if(pathFood&&pathFood.firstDir===d){score+=P.food-pathFood.dist*(hpTier==='critical'?0.5:(hpTier==='hungry'?1:1.8));}
+      var onFood=false,onSpider=false;
+      for(var ff=0;ff<state.foods.length;ff++){if(state.foods[ff].x===nx&&state.foods[ff].y===ny){if(state.foods[ff].type==='spider')onSpider=true;else onFood=true;}}
+      if(onFood&&!dangerStep1[nk])score+=P.food*0.8;
+      if(onSpider)score-=400;
+      if(canHunt&&space>=softThreshold){if(killZone[nk])score+=100*P.hunt;if(pathHunt&&pathHunt.firstDir===d)score+=50*P.hunt-pathHunt.dist*4;}
+      // ===== 残局封锁（质变核心）=====
+      // 仅当我方落点自身足够安全(空间>=softThreshold)时，才追求"压缩对手空间"，绝不为封锁牺牲生存。
+      if(endgame && space>=softThreshold){
+        var extra={};extra[nk]=true;                       // 把我方新头当作障碍
+        var enSp=enemySpace(soleEnemy,extra);              // 对手在我落子后的可达空间
+        var squeeze=baseEnemySpace-enSp;                   // 我这一步压缩了对手多少空间
+        // 空间博弈：最大化(我方空间 - 对手空间)；并对"显著压缩对手"额外奖励
+        var advantage=space-enSp;
+        score+=advantage*1.8;
+        if(squeeze>0)score+=squeeze*5;                     // 主动封锁奖励
+        // 若能把对手压进比其自身长度还小的死空间 → 接近绝杀，重奖
+        if(enSp>0 && enSp<soleEnemy.len*1.1)score+=450;
+        // 我方比对手长时更激进封锁；更短时偏保守(权重减半已由 advantage 体现)
+        if(myLen<soleEnemy.len){ score-=advantage*1.8; if(squeeze>0)score-=squeeze*5; } // 比对手短:取消封锁奖励,纯生存
+      }
+      var ed=Math.min(nx,ny,W-1-nx,H-1-ny);
+      if(phase==='mature'){if(ed<=2)score-=(3-ed)*P.edge;}
+      else{var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.4;}
+      cand.push({dir:d,score:score});
+    }
+    if(cand.length===0){var fb=self.dir,bsp=-1;for(var dz in DIRS){if(dz===OPP[self.dir])continue;var sp=floodSpace(head.x+DIRS[dz].x,head.y+DIRS[dz].y);if(sp>bsp){bsp=sp;fb=dz;}}return fb;}
+    cand.sort(function(a,b){return b.score-a.score;});
+    return cand[0].dir;
+  },
 };
 
 /* ============================================================
@@ -792,6 +1177,140 @@ let nextId = 1;
 let game = null;          // 当前单场 SnakeGame
 let raf = null, running=false, fps=10, lastT=0;
 let batchAbort=false;
+let lastBatchIds=[];      // 上一次批量赛参赛蛇
+let lastSingleRes=null;   // 上一次单场的 result（用于单场失败分布）
+
+/* ============================================================
+   全局对战数据池：跨会话累积每条蛇按"代际"聚合的统计
+   以 蛇名 为 key（进化不改名→同名归并；改名=新条目）。
+   每条记录按"代"(generation)切分：每次进化该蛇时开新一代，
+   这样能对比进化前后的表现。存 localStorage。
+   ============================================================ */
+const POOL_KEY = 'snake_data_pool_v1';
+function loadPool(){ try{ return JSON.parse(localStorage.getItem(POOL_KEY)||'{}'); }catch(e){ return {}; } }
+function savePool(p){ try{ localStorage.setItem(POOL_KEY, JSON.stringify(p)); }catch(e){} }
+function emptyAgg(){
+  return { plays:0, wins:0, survives:0,
+    deaths:{ 撞墙:0, 撞自己:0, 撞蛇:0, 头碰头:0, 体力耗尽:0, 存活:0 },
+    sumLen:0, sumSurvTurns:0, bun:0, peach:0, spider:0 };
+}
+// 给某蛇开启新一代（进化后调用）
+function poolNewGeneration(name){
+  const pool = loadPool();
+  if(!pool[name]) pool[name] = { gen:0, total:emptyAgg(), gens:[emptyAgg()] };
+  pool[name].gen = (pool[name].gen||0) + 1;
+  pool[name].gens = pool[name].gens || [];
+  pool[name].gens.push(emptyAgg());
+  if(pool[name].gens.length>30) pool[name].gens.shift(); // 上限保护
+  savePool(pool);
+}
+// 把一场 result 记入数据池
+function poolRecord(res, ctx){
+  const pool = loadPool();
+  res.forEach(r=>{
+    const name = r.name;
+    if(!pool[name]) pool[name] = { gen:0, total:emptyAgg(), gens:[emptyAgg()] };
+    const node = pool[name];
+    if(!node.gens || !node.gens.length) node.gens=[emptyAgg()];
+    const cur = node.gens[node.gens.length-1];
+    [node.total, cur].forEach(agg=>{
+      agg.plays++;
+      if(r.rank===1) agg.wins++;
+      if(r.alive) agg.survives++;
+      const reason = r.alive?'存活':(r.deathReason||'存活');
+      agg.deaths[reason] = (agg.deaths[reason]||0)+1;
+      agg.sumLen += r.length;
+      agg.sumSurvTurns += r.survivedTurns;
+      agg.bun += r.bunEaten||0;
+      agg.peach += r.peachEaten||0;
+      agg.spider += r.spiderEaten||0;
+    });
+  });
+  // 记录全局元信息（食物比例对胜率影响等）
+  pool._meta = pool._meta || { totalMatches:0, byFoodRatio:[] };
+  pool._meta.totalMatches += 1;
+  savePool(pool);
+}
+
+// 诊断累加器：记录每条蛇在批量赛中的细粒度表现
+function newDiag(){
+  return {
+    plays:0, wins:0, survives:0,
+    deaths:{ 撞墙:0, 撞自己:0, 撞蛇:0, 头碰头:0, 体力耗尽:0, 存活:0 },
+    sumLen:0, sumSurvTurns:0,
+    bun:0, peach:0, spider:0,        // 各类食物吃到总数
+  };
+}
+function resetAllDiag(){ roster.forEach(r=> r.diag = newDiag()); }
+// 把一场 result() 计入对应蛇的诊断
+function collectDiag(res){
+  res.forEach(r=>{
+    const p = roster.find(x=>x.id===r.id);
+    if(!p) return;
+    if(!p.diag) p.diag = newDiag();
+    const dg = p.diag;
+    dg.plays++;
+    if(r.rank===1) dg.wins++;
+    if(r.alive) dg.survives++;
+    const reason = r.deathReason||'存活';
+    dg.deaths[reason] = (dg.deaths[reason]||0) + 1;
+    dg.sumLen += r.length;
+    dg.sumSurvTurns += r.survivedTurns;
+    dg.bun += r.bunEaten||0;
+    dg.peach += r.peachEaten||0;
+    dg.spider += r.spiderEaten||0;
+  });
+}
+// 把诊断浓缩成一份人类/LLM 都易读的报告对象
+function summarizeDiag(p){
+  const d = p.diag || newDiag();
+  const n = d.plays || 1;
+  const totalDeaths = d.deaths.撞墙+d.deaths.撞自己+d.deaths.撞蛇+d.deaths.头碰头+d.deaths.体力耗尽;
+  const td = totalDeaths || 1;
+  const pct = (x)=> (100*x/n).toFixed(0)+'%';
+  const dpct = (x)=> (100*x/td).toFixed(0)+'%';
+  return {
+    name: p.name,
+    plays: d.plays,
+    winRate: pct(d.wins),
+    surviveRate: pct(d.survives),
+    avgLen: (d.sumLen/n).toFixed(1),
+    avgSurvTurns: (d.sumSurvTurns/n).toFixed(0),
+    // 死因分布（占所有死亡的比例）
+    deathBreak: {
+      撞墙: dpct(d.deaths.撞墙),
+      撞自己: dpct(d.deaths.撞自己),
+      撞蛇: dpct(d.deaths.撞蛇),
+      头碰头: dpct(d.deaths.头碰头),
+      困死饿死: dpct(d.deaths.体力耗尽),
+    },
+    // 抢食效率
+    food: { 包子: d.bun, 蟠桃: d.peach, 误吃毒蜘蛛: d.spider },
+    foodPerGame: ((d.bun+d.peach)/n).toFixed(1),
+    raw: d,
+  };
+}
+
+// 读取当前食物比例配置（来自三个输入框）
+function getFoodWeights(){
+  const g=(id,def)=>{ const v=parseFloat((document.getElementById(id)||{}).value); return isNaN(v)||v<0?def:v; };
+  return { bun:g('food-bun',55), peach:g('food-peach',15), spider:g('food-spider',30) };
+}
+// 渲染比例条与百分比文字
+function renderFoodRatio(){
+  const w=getFoodWeights();
+  const total=w.bun+w.peach+w.spider;
+  const bar=document.getElementById('food-ratio-bar');
+  const lbl=document.getElementById('food-ratio-label');
+  if(!bar||!lbl) return;
+  if(total<=0){ bar.innerHTML='<div style="flex:1;background:var(--border)"></div>'; lbl.textContent='权重全为0，将默认只生成包子'; return; }
+  const pb=w.bun/total, pp=w.peach/total, ps=w.spider/total;
+  bar.innerHTML =
+    `<div style="width:${pb*100}%;background:#e3b341"></div>`+
+    `<div style="width:${pp*100}%;background:#ff6ec7"></div>`+
+    `<div style="width:${ps*100}%;background:#8957e5"></div>`;
+  lbl.textContent=`🥟${(pb*100).toFixed(0)}% · 🍑${(pp*100).toFixed(0)}% · 🕷️${(ps*100).toFixed(0)}%`;
+}
 
 function uid(){ return 'snk_'+(nextId++); }
 function toast(msg){
@@ -800,11 +1319,55 @@ function toast(msg){
   clearTimeout(t._tm); t._tm=setTimeout(()=>t.classList.remove('show'),1800);
 }
 
-/* 把内置 AI 作为示例预置三个陪练 */
+/* 把内置 AI 作为示例预置陪练
+   用 toString() 把内置函数转成可编辑源码（包成标准 move 函数），
+   这样内置陪练也带"真实源码"，可被「🧬 一键进化」改进。 */
+function builtinSrc(fn){
+  // BUILTIN_AIS.xxx 是 function(state){...}，转成 function move(state){...}
+  var body = fn.toString();
+  // 替换形如 "function (state)" / "function(state)" 前缀为 "function move(state)"
+  body = body.replace(/^function\s*\(/, 'function move(');
+  if(body.indexOf('function move')!==0) body = 'var move = ' + body + ';';
+  return body;
+}
+// 内置陪练清单（统一来源，seed 与"补齐缺失"都用它）
+const BUILTIN_LIST = [
+  { name:'🎯围猎Siege', pal:6, fn:'hunterSiege' },
+  { name:'🤖状态机FSM', pal:3, fn:'hunterFSM' },
+  { name:'👑猎手Pro+',  pal:5, fn:'hunterProPlus' },
+  { name:'🏆猎手Pro',   pal:4, fn:'hunterPro' },
+  { name:'贪心猎手',    pal:0, fn:'greedy' },
+  { name:'稳健生存',    pal:1, fn:'survivor' },
+  { name:'随机漫步',    pal:2, fn:'wanderer' },
+];
 function seedBuiltins(){
-  addRoster('贪心猎手', PALETTE[0], '/*builtin*/', BUILTIN_AIS.greedy);
-  addRoster('稳健生存', PALETTE[1], '/*builtin*/', BUILTIN_AIS.survivor);
-  addRoster('随机漫步', PALETTE[2], '/*builtin*/', BUILTIN_AIS.wanderer);
+  BUILTIN_LIST.forEach(b=>{
+    addRoster(b.name, PALETTE[b.pal], builtinSrc(BUILTIN_AIS[b.fn]), BUILTIN_AIS[b.fn]);
+  });
+}
+// 恢复存档后：①补齐缺失的内置陪练（如新版本新增的 FSM）；
+// ②把仍是内置占位码(未被用户进化改动)的同名内置蛇，刷新成最新版源码/AI（如 FSM v1→v2）。
+function ensureBuiltins(){
+  let added=0;
+  BUILTIN_LIST.forEach(b=>{
+    const latestSrc = builtinSrc(BUILTIN_AIS[b.fn]);
+    const exist = roster.find(r=>r.name===b.name);
+    if(!exist){
+      addRoster(b.name, PALETTE[b.pal], latestSrc, BUILTIN_AIS[b.fn]);
+      added++;
+    }else if(exist.code !== latestSrc){
+      // 仅当该蛇的源码看起来仍是"内置生成的整函数"(未被用户手改/进化)时才升级，避免覆盖用户成果。
+      // 判定：源码是单个 function move(state){...} 且不含用户自定义注释标记。
+      const looksBuiltin = /^function move\(/.test((exist.code||'').trim());
+      if(looksBuiltin){
+        exist.code = latestSrc;
+        try{ exist.ai = compileAI(latestSrc, b.name); }catch(e){}
+      }
+    }
+  });
+  if(added || roster.length) persistRoster();
+  renderRoster(); renderSelectList(); renderRankboard();
+  return added;
 }
 
 function addRoster(name, color, code, aiFn){
@@ -812,15 +1375,147 @@ function addRoster(name, color, code, aiFn){
     id: uid(), name, color, code,
     ai: aiFn,
     wins:0, survives:0, points:0, plays:0, kills:0,
+    diag: newDiag(),
   };
   roster.push(r);
   renderRoster(); renderSelectList(); renderRankboard();
+  persistRoster();
   return r;
 }
 
 function removeRoster(id){
   roster = roster.filter(r=>r.id!==id);
   renderRoster(); renderSelectList(); renderRankboard();
+  persistRoster();
+}
+
+/* ============================================================
+   选手持久化：把擂台所有蛇（含进化后代码）存本地，刷新不丢失
+   只存可序列化字段（名称/颜色/源码/积分），ai 函数加载时由 code 重新编译。
+   ============================================================ */
+const ROSTER_KEY = 'snake_roster_v1';
+function persistRoster(){
+  try{
+    const data = roster.map(r=>({
+      name:r.name, color:r.color, code:r.code,
+      wins:r.wins, survives:r.survives, points:r.points, plays:r.plays,
+    }));
+    localStorage.setItem(ROSTER_KEY, JSON.stringify(data));
+  }catch(e){}
+}
+// 从本地恢复擂台；成功返回 true
+function restoreRoster(){
+  let data;
+  try{ data = JSON.parse(localStorage.getItem(ROSTER_KEY)||'null'); }catch(e){ data=null; }
+  if(!Array.isArray(data) || !data.length) return false;
+  let ok=0;
+  data.forEach(d=>{
+    let aiFn;
+    try{ aiFn = compileAI(d.code, d.name); }
+    catch(e){ return; }   // 编译失败的跳过
+    const r = {
+      id: uid(), name:d.name, color:d.color, code:d.code, ai:aiFn,
+      wins:d.wins||0, survives:d.survives||0, points:d.points||0, plays:d.plays||0,
+      kills:0, diag:newDiag(),
+    };
+    roster.push(r); ok++;
+  });
+  if(ok){ renderRoster(); renderSelectList(); renderRankboard(); }
+  return ok>0;
+}
+// 重置擂台为初始内置陪练（清掉本地存档）
+function resetRoster(){
+  if(!confirm('确定重置擂台？将清除所有上传/进化的蛇，恢复为初始内置陪练。')) return;
+  localStorage.removeItem(ROSTER_KEY);
+  roster = []; nextId = 1;
+  seedBuiltins();
+  toast('已重置为初始陪练');
+}
+
+/* ============================================================
+   全量存档：把所有数据(蛇/经验/元规律/配置)导出为一个 JSON 文件，
+   可在另一台电脑/浏览器导入恢复，不依赖单一 localStorage。
+   ============================================================ */
+function exportBackup(){
+  // 先把当前内存中的蛇刷进 localStorage，保证导出最新
+  persistRoster();
+  const backup = {
+    _type: 'snake-arena-backup',
+    _version: 1,
+    _exportedAt: new Date().toISOString(),
+    roster:  safeParse(localStorage.getItem(ROSTER_KEY), []),
+    lessons: safeParse(localStorage.getItem(LESSON_KEY), []),
+    meta:    safeParse(localStorage.getItem(META_KEY), null),
+    llmCfg:  safeParse(localStorage.getItem(LLM_CFG_KEY), {}),
+    pool:    safeParse(localStorage.getItem(POOL_KEY), {}),
+  };
+  // 配置里的 apiKey 出于安全默认抹掉（避免明文外泄），保留 baseUrl/model
+  if(backup.llmCfg && backup.llmCfg.apiKey) backup.llmCfg = { baseUrl:backup.llmCfg.baseUrl, model:backup.llmCfg.model };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  a.download = 'snake_backup_'+ts+'.json';
+  a.click();
+  toast('已导出全部存档 JSON');
+}
+function safeParse(s, def){ try{ return s? JSON.parse(s): def; }catch(e){ return def; } }
+
+// 导入存档文件
+function importBackup(file){
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    let data;
+    try{ data = JSON.parse(fr.result); }
+    catch(e){ toast('❌ 文件不是合法 JSON'); return; }
+    if(!data || data._type!=='snake-arena-backup'){
+      if(!confirm('该文件似乎不是本平台的存档，仍要尝试导入吗？')) return;
+    }
+    const mode = confirm('点「确定」=覆盖现有数据；点「取消」=与现有数据合并（蛇追加）。');
+    applyBackup(data, mode ? 'replace' : 'merge');
+  };
+  fr.onerror = ()=> toast('❌ 读取文件失败');
+  fr.readAsText(file);
+}
+
+// 应用导入的数据
+function applyBackup(data, mode){
+  // 1. 经验 / 元规律 / 配置：直接覆盖（merge 模式下经验做拼接）
+  if(Array.isArray(data.lessons)){
+    if(mode==='merge'){
+      const cur = loadLessons();
+      saveLessons(data.lessons.concat(cur).slice(0,200));
+    }else{
+      saveLessons(data.lessons.slice(0,200));
+    }
+  }
+  if(data.meta) saveMeta(data.meta);
+  if(data.pool && typeof data.pool==='object') savePool(data.pool);
+  if(data.llmCfg && data.llmCfg.baseUrl){
+    const cur = loadLlmCfg();
+    saveLlmCfg(Object.assign({}, cur, { baseUrl:data.llmCfg.baseUrl, model:data.llmCfg.model }));
+  }
+  // 2. 蛇：replace 清空后重建，merge 追加
+  if(Array.isArray(data.roster)){
+    if(mode==='replace'){ roster=[]; nextId=1; }
+    let ok=0, fail=0;
+    data.roster.forEach(d=>{
+      try{
+        const aiFn = compileAI(d.code, d.name);
+        roster.push({
+          id:uid(), name:d.name, color:d.color, code:d.code, ai:aiFn,
+          wins:d.wins||0, survives:d.survives||0, points:d.points||0, plays:d.plays||0,
+          kills:0, diag:newDiag(),
+        });
+        ok++;
+      }catch(e){ fail++; }
+    });
+    renderRoster(); renderSelectList(); renderRankboard();
+    persistRoster();
+    toast(`✅ 导入完成：蛇 成功${ok}/失败${fail}，经验与配置已恢复`);
+  }else{
+    toast('✅ 经验/元规律/配置已导入');
+  }
 }
 
 /* ============================================================
@@ -831,9 +1526,13 @@ function renderRoster(){
   document.getElementById('roster-count').textContent=roster.length;
   el.innerHTML = roster.map(r=>`
     <div class="snake-item">
-      <span class="dot" style="background:${r.color}"></span>
-      <div>
-        <div class="nm">${escapeHtml(r.name)}</div>
+      <label class="dot-pick" title="点击修改颜色" style="position:relative;">
+        <span class="dot" style="background:${r.color}"></span>
+        <input type="color" class="color-edit" data-color="${r.id}" value="${r.color}"
+          style="position:absolute;left:0;top:0;width:12px;height:12px;opacity:0;cursor:pointer;">
+      </label>
+      <div style="min-width:0;flex:1;">
+        <div class="nm" data-rename="${r.id}" title="点击重命名" style="cursor:text;">${escapeHtml(r.name)}</div>
         <div class="st">${r.wins}胜 / ${r.survives}存活 / ${r.points}分</div>
       </div>
       <span class="x" data-del="${r.id}" title="移除">✕</span>
@@ -841,7 +1540,40 @@ function renderRoster(){
   el.querySelectorAll('[data-del]').forEach(b=>{
     b.onclick=()=>removeRoster(b.getAttribute('data-del'));
   });
+  // 修改颜色
+  el.querySelectorAll('[data-color]').forEach(inp=>{
+    inp.oninput=()=>{ setSnakeColor(inp.getAttribute('data-color'), inp.value); };
+  });
+  // 双击/点击重命名
+  el.querySelectorAll('[data-rename]').forEach(nm=>{
+    nm.onclick=()=> renameSnake(nm.getAttribute('data-rename'));
+  });
   updateStatLine();
+}
+
+// 修改某条蛇的颜色（同步刷新所有用到颜色的视图）
+function setSnakeColor(id, color){
+  const r=roster.find(x=>x.id===id);
+  if(!r) return;
+  r.color=color;
+  // 若对局进行中，同步到画布上的蛇
+  if(game){ const gs=game.snakes.find(s=>s.id===id); if(gs) gs.color=color; drawGame(game); }
+  renderRoster(); renderSelectList(); renderRankboard();
+  persistRoster();
+}
+
+// 重命名某条蛇
+function renameSnake(id){
+  const r=roster.find(x=>x.id===id);
+  if(!r) return;
+  const nv=prompt('修改蛇名：', r.name);
+  if(nv===null) return;
+  const name=nv.trim();
+  if(!name){ toast('名称不能为空'); return; }
+  r.name=name;
+  renderRoster(); renderSelectList(); renderRankboard();
+  if(game) drawGame(game);
+  persistRoster();
 }
 
 function renderSelectList(){
@@ -988,7 +1720,7 @@ function startSingleMatch(){
   if(ids.length>4){ toast('单场最多 4 条蛇'); return; }
   const maxTurns=parseInt(document.getElementById('max-turns').value)||DEFAULT_MAX_TURNS;
   stopLoop();
-  game=new SnakeGame(buildPlayers(ids), {maxTurns, seed:(Math.random()*1e9)|0});
+  game=new SnakeGame(buildPlayers(ids), {maxTurns, seed:(Math.random()*1e9)|0, foodWeights:getFoodWeights()});
   drawGame(game);
   running=false;
   toast('已布阵 '+ids.length+' 条蛇，点击开始全场');
@@ -1025,13 +1757,18 @@ function stepOnce(){
   if(game.gameOver){ finishSingle(game); }
 }
 
-// 单场结束 → 计入积分
+// 单场结束 → 计入积分 + 生成本场诊断
 function finishSingle(g){
   const res=g.result();
   applyScores(res);
+  poolRecord(res);   // 计入全局数据池
+  // 单场诊断：以本场 result 直接构建"单场失败分布"，独立于批量赛累计诊断
+  lastSingleRes = res;
   renderRoster(); renderRankboard(); renderSelectList();
   const champ=res[0];
-  toast(`🏆 本场冠军：${champ.name}（${champ.alive?'存活':'坚持到第'+champ.deathTurn+'回合'}）`);
+  toast(`🏆 本场冠军：${champ.name} · 点此查看本场失败分布`);
+  // 自动弹出本场报告
+  openSingleReport(res);
 }
 
 /* 积分规则：
@@ -1052,6 +1789,7 @@ function applyScores(res){
     if(r.rank===1) player.wins++;
     if(r.alive) player.survives++;
   });
+  persistRoster();   // 积分变动后持久化
 }
 
 /* ============================================================
@@ -1065,14 +1803,21 @@ async function runBatch(){
   const prog=document.getElementById('batch-progress');
   batchAbort=false;
   stopLoop();
+  // 本轮批量赛的诊断单独统计（只统计参赛蛇），先清零
+  ids.forEach(id=>{ const p=roster.find(x=>x.id===id); if(p) p.diag=newDiag(); });
+  lastBatchIds = ids.slice();
+  const fw=getFoodWeights();
   let done=0;
   const t0=performance.now();
   for(let i=0;i<rounds;i++){
     if(batchAbort){ prog.textContent=`已终止，完成 ${done}/${rounds} 场`; break; }
-    const g=new SnakeGame(buildPlayers(ids), {maxTurns, seed:(Math.random()*1e9)|0});
+    const g=new SnakeGame(buildPlayers(ids), {maxTurns, seed:(Math.random()*1e9)|0, foodWeights:fw});
     let guard=0;
     while(!g.gameOver && guard<maxTurns+5){ g.step(); guard++; }
-    applyScores(g.result());
+    const res=g.result();
+    applyScores(res);
+    collectDiag(res);
+    poolRecord(res);   // 计入全局数据池
     done++;
     if(i%5===0 || i===rounds-1){
       prog.textContent=`进行中… ${done}/${rounds} 场`;
@@ -1082,9 +1827,14 @@ async function runBatch(){
   }
   const dt=((performance.now()-t0)/1000).toFixed(1);
   renderRankboard(); renderRoster(); renderSelectList();
-  if(!batchAbort) prog.textContent=`✅ 完成 ${done} 场，用时 ${dt}s`;
+  if(!batchAbort){
+    // 用 innerHTML 才能让链接成为真实 DOM 元素（textContent 会把标签当纯文本）
+    prog.innerHTML=`✅ 完成 ${done} 场，用时 ${dt}s · <span class="link" id="open-diag">📈 查看诊断报告</span>`;
+    const od=document.getElementById('open-diag');
+    if(od) od.onclick=()=> openDiagReport(lastBatchIds);
+  }
   const champ=[...roster].sort((a,b)=>b.points-a.points)[0];
-  if(champ) toast(`批量赛冠军：${champ.name}（${champ.points}分）`);
+  if(champ) toast(`批量赛冠军：${champ.name}（${champ.points}分），可查看诊断报告`);
 }
 
 /* ============================================================
@@ -1105,9 +1855,988 @@ function exportRank(){
 }
 
 function clearRank(){
-  roster.forEach(r=>{r.points=0;r.plays=0;r.wins=0;r.survives=0;r.kills=0;});
+  roster.forEach(r=>{r.points=0;r.plays=0;r.wins=0;r.survives=0;r.kills=0;r.diag=newDiag();});
   renderRoster();renderRankboard();
+  persistRoster();
   toast('积分榜已清空');
+}
+
+/* ============================================================
+   10.5 进化系统：中文造蛇 / 诊断报告 / 一键进化
+   ============================================================ */
+
+// 给 LLM 的统一"规范+模板"——保证生成的代码可直接上传、不封顶上限
+const SPEC_FOR_LLM = `【贪吃蛇 AI 编写规范】
+你要写一个 JavaScript 决策函数，函数名必须是 move，签名为 move(state)，每回合被调用一次，返回方向字符串：'up' | 'down' | 'left' | 'right'。
+
+游戏规则：
+- 地图 19x19 网格，坐标 (0,0) 在左上角，x 向右、y 向下，四周是墙，撞墙死。
+- 蛇每移动一步 -1 HP，初始 100 HP，HP<=0 饿死。吃食物当回合尾巴不缩。
+- 不可反向（向右时返回 left 会被忽略）。所有蛇同步移动。
+- 死亡：撞墙 / 撞自己身体 / 撞别的蛇身体 / 头碰头(同一格,较短者死,等长同归于尽)。
+- 食物：bun 包子(长+1,HP+40)、peach 蟠桃(长+3,HP满)、spider 毒蜘蛛(长+1,HP-60，应避开)。
+
+state 结构（只读）：
+{
+  gridWidth:19, gridHeight:19, turn, maxTurns,
+  self:{ id, hp, dir, head:{x,y}, body:[{x,y}...](body[0]为头), length },
+  snakes:[{ id, name, alive, hp, dir, head:{x,y}, body:[{x,y}...], length, isSelf }...],
+  foods:[{ x, y, type:'bun'|'peach'|'spider', grow, hp }...]
+}
+
+硬性要求：
+1. 只输出一个完整的 move(state) 函数，用 \`\`\`js 代码块包裹，禁止任何解释文字。
+2. 运行在隔离沙箱，禁止使用 window/document/fetch/setTimeout 等，只能用纯计算（数组、对象、Math）。
+3. 不可反向、不要走进死胡同、避开毒蜘蛛。函数要快速返回，避免死循环。
+4. 鼓励使用 flood-fill 评估逃生空间、BFS 找食物路径、预测对手蛇头规避头碰头等高级策略——算法复杂度不设上限，越强越好。`;
+
+// 中文造蛇：把用户的中文策略描述拼成给 LLM 的 prompt
+function buildCreatePrompt(desc){
+  return SPEC_FOR_LLM + `
+
+【本次任务】请根据下面这段中文策略描述，编写一个尽可能强的 move(state) 函数：
+"""
+${desc}
+"""
+请直接输出 \`\`\`js 代码块，不要解释。`;
+}
+
+// 把诊断浓缩成给 LLM 的文字报告
+function diagReportText(d){
+  return `对战表现统计（共 ${d.plays} 场）：
+- 胜率：${d.winRate}，存活到终局：${d.surviveRate}
+- 平均长度：${d.avgLen}，平均存活回合：${d.avgSurvTurns}
+- 死因分布（占所有死亡）：撞墙 ${d.deathBreak.撞墙}，撞自己 ${d.deathBreak.撞自己}，撞蛇 ${d.deathBreak.撞蛇}，头碰头 ${d.deathBreak.头碰头}，困死/饿死 ${d.deathBreak.困死饿死}
+- 抢食：包子 ${d.food.包子} 个，蟠桃 ${d.food.蟠桃} 个，误吃毒蜘蛛 ${d.food.误吃毒蜘蛛} 个，场均吃食 ${d.foodPerGame} 个`;
+}
+
+// 一键进化：要求 LLM 同时产出 ①改进代码 ②改进意见 ③可复用经验规律（结构化）
+function buildEvolvePrompt(summary, oldCode){
+  const report = diagReportText(summary);
+  return SPEC_FOR_LLM + `
+
+【本次任务】下面是一条蛇当前的 move 函数代码，以及它在批量赛中的真实表现。请完成两件事：
+（1）针对性改进代码，重点解决暴露出的弱点（撞墙率高→加强边界规避；头碰头率高→加强对手蛇头预测；困死率高→加强 flood-fill 空间评估；误吃毒多→强化避毒；抢食少→优化 BFS 路径）。在保持稳定前提下尽量提升胜率与存活率。
+（2）总结你的分析与经验规律，供人类与后续迭代复用。
+
+${report}
+
+当前代码：
+\`\`\`js
+${oldCode}
+\`\`\`
+
+请严格按以下格式输出三段，顺序固定，不要有多余内容：
+
+### 改进意见
+（针对本次诊断数据，列出 2~4 条本次具体改了什么、为什么改，每条一行）
+
+### 经验规律
+（总结可复用的贪吃蛇 AI 通用规律，2~4 条，与本局数据无关也能用于以后，每条一行）
+
+### 改进代码
+\`\`\`js
+（改进后的完整 move(state) 函数）
+\`\`\``;
+}
+
+// 数据驱动进化：用全局数据池(含历代趋势+全局规律+元规律)构建更强的进化 prompt
+function buildPoolEvolvePrompt(snake){
+  const pool = loadPool();
+  const node = pool[snake.name];
+  let dataBlock = '（暂无该蛇的历史数据）';
+  if(node){
+    const t = aggSummary(node.total);
+    const gens = (node.gens||[]).filter(g=>g.plays>0).map((g,i)=>{
+      const s=aggSummary(g);
+      return `  第${i+1}代：${s.plays}场 胜率${s.winRate.toFixed(0)}% 存活${s.surviveRate.toFixed(0)}% 均长${s.avgLen.toFixed(1)} 头号死因占比(困死${s.deathPct.困死饿死.toFixed(0)}%/头碰头${s.deathPct.头碰头.toFixed(0)}%/撞蛇${s.deathPct.撞蛇.toFixed(0)}%/撞墙${s.deathPct.撞墙.toFixed(0)}%/撞自己${s.deathPct.撞自己.toFixed(0)}%)`;
+    }).join('\n');
+    dataBlock =
+`累计 ${t.plays} 场，总胜率 ${t.winRate.toFixed(0)}%，存活率 ${t.surviveRate.toFixed(0)}%，平均长度 ${t.avgLen.toFixed(1)}，场均吃食 ${t.foodPerGame.toFixed(1)}，误吃毒 ${t.spider} 次。
+死因分布(占所有死亡)：困死/饿死 ${t.deathPct.困死饿死.toFixed(0)}% · 头碰头 ${t.deathPct.头碰头.toFixed(0)}% · 撞蛇 ${t.deathPct.撞蛇.toFixed(0)}% · 撞墙 ${t.deathPct.撞墙.toFixed(0)}% · 撞自己 ${t.deathPct.撞自己.toFixed(0)}%
+历代进化趋势：
+${gens||'  （无分代数据）'}`;
+  }
+  const tdc = topDeathCause();
+  const metaObj = loadMeta();
+  const metaBlock = (metaObj&&metaObj.text) ? ('\n\n已沉淀的元规律（请优先遵循）：\n'+metaObj.text) : '';
+
+  return SPEC_FOR_LLM + `
+
+【本次任务·数据驱动进化】下面是这条蛇「${snake.name}」在全局对战数据池中的累计表现（含历代进化趋势），以及全局规律。请基于这些"长期、跨多场"的统计（而非单场偶然），从根因上改进代码：
+- 优先解决占比最高、且历代未能下降的死因；
+- 参考历代趋势，避免重复过去无效的改动方向（如某死因反复反弹说明上次改法治标不治本）；
+- 全局头号死因是「${tdc.cause}」(占 ${tdc.pct}%)，请重点应对。
+
+${dataBlock}${metaBlock}
+
+当前代码：
+\`\`\`js
+${snake.code}
+\`\`\`
+
+请严格按以下格式输出三段，顺序固定，不要有多余内容：
+
+### 改进意见
+（基于全量数据的根因分析，列出 2~4 条本次改了什么、针对哪个长期问题）
+
+### 经验规律
+（从这条蛇的历代趋势中提炼可复用规律，2~4 条）
+
+### 改进代码
+\`\`\`js
+（改进后的完整 move(state) 函数）
+\`\`\``;
+}
+
+// 数据驱动进化入口：复用进化弹窗，但 prompt 用全量数据池
+function evolveByPool(snake){
+  if(!snake.code || !/function|=>|move|return/.test(snake.code)){
+    toast('这条蛇暂无可读源码，无法进化'); return;
+  }
+  const prompt = buildPoolEvolvePrompt(snake);
+  // 用全局数据池的总聚合作为 summary（存档用）
+  const pool=loadPool(); const node=pool[snake.name];
+  const summary = node ? (function(){ const s=aggSummary(node.total); return {
+    winRate:s.winRate.toFixed(0)+'%', deathBreak:{
+      撞墙:s.deathPct.撞墙.toFixed(0)+'%', 撞自己:s.deathPct.撞自己.toFixed(0)+'%',
+      撞蛇:s.deathPct.撞蛇.toFixed(0)+'%', 头碰头:s.deathPct.头碰头.toFixed(0)+'%',
+      困死饿死:s.deathPct.困死饿死.toFixed(0)+'%' } }; })()
+    : { winRate:'-', deathBreak:{} };
+  showEvolveModal(snake, summary, prompt);
+}
+
+// 解析 LLM 的三段式回复 → {advice, lessons, code}
+// 兼容多种标题写法：### 改进意见 / **改进意见** / 改进意见： / 1. 改进意见 等
+function parseEvolveReply(text){
+  if(!text) return { advice:'', lessons:'', code:'' };
+
+  // 三个段落的别名（容错不同措辞）
+  const SECTIONS = {
+    advice:  ['改进意见','改进建议','优化意见','改动说明','修改说明'],
+    lessons: ['经验规律','经验总结','规律总结','经验','总结规律'],
+    code:    ['改进代码','优化代码','新代码','完整代码','代码'],
+  };
+
+  // 在文本中找某组别名作为"标题行"出现的位置（行首，可带 #/*/数字/空白前缀，后可带 :：）
+  function findLabelPos(aliases){
+    let best = -1, bestEnd = -1, bestLen = 0;
+    for(const a of aliases){
+      // 行首：可有 #、*、空白、序号(1. / 1、)，然后是别名，后面可跟冒号
+      const re = new RegExp('(^|\\n)[ \\t]*(?:#{1,6}\\s*)?(?:\\*{1,2}\\s*)?(?:\\d+[\\.\\、]\\s*)?'+a+'\\s*[:：]?\\s*(?:\\*{1,2})?[ \\t]*(?=\\n|$)','');
+      const m = text.match(re);
+      if(m){
+        const pos = m.index + m[1].length;        // 标题行起点
+        const end = m.index + m[0].length;        // 标题行末尾（正文开始）
+        if(best===-1 || pos < best){ best = pos; bestEnd = end; bestLen = a.length; }
+      }
+    }
+    return best===-1 ? null : { titleStart: best, contentStart: bestEnd };
+  }
+
+  // 找到三段标题位置
+  const positions = [];
+  for(const key in SECTIONS){
+    const p = findLabelPos(SECTIONS[key]);
+    if(p) positions.push({ key, ...p });
+  }
+  positions.sort((a,b)=> a.titleStart - b.titleStart);
+
+  const result = { advice:'', lessons:'', code:'' };
+
+  if(positions.length){
+    // 每段内容 = 本段标题后 → 下一段标题前
+    for(let i=0;i<positions.length;i++){
+      const cur = positions[i];
+      const next = positions[i+1];
+      const seg = text.slice(cur.contentStart, next ? next.titleStart : text.length).trim();
+      result[cur.key] = seg;
+    }
+  }
+
+  // 代码段：优先用 code 段里的围栏，否则全局找第一个 ```js``` 块
+  result.code = extractCode(result.code) || extractCode(text);
+
+  // 意见/经验里若残留代码围栏则清掉
+  const stripFence = (s)=> (s||'').replace(/```[\s\S]*?```/g,'').replace(/^[#*\s]+/,'').trim();
+  result.advice = stripFence(result.advice);
+  result.lessons = stripFence(result.lessons);
+
+  // 兜底：若完全没识别到标题（纯三段文本无任何标记），尝试用关键词切分
+  if(!result.advice && !result.lessons && /改进意见|经验规律/.test(text)){
+    const idxA = text.search(/改进意见/);
+    const idxL = text.search(/经验规律/);
+    const idxC = text.search(/改进代码|```/);
+    if(idxA>=0 && idxL>idxA){
+      result.advice = stripFence(text.slice(idxA, idxL).replace(/^改进意见[:：]?/,''));
+      const endL = idxC>idxL ? idxC : text.length;
+      result.lessons = stripFence(text.slice(idxL, endL).replace(/^经验规律[:：]?/,''));
+    }
+  }
+
+  return result;
+}
+
+/* ---------- 本地经验库（localStorage + 导出 Markdown）---------- */
+const LESSON_KEY = 'snake_lessons';
+function loadLessons(){
+  try{ return JSON.parse(localStorage.getItem(LESSON_KEY)||'[]'); }catch(e){ return []; }
+}
+function saveLessons(arr){
+  try{ localStorage.setItem(LESSON_KEY, JSON.stringify(arr)); }catch(e){}
+}
+// 追加一条经验记录
+function addLessonRecord(rec){
+  const arr = loadLessons();
+  arr.unshift(rec);                 // 最新在前
+  if(arr.length>200) arr.length=200; // 上限保护
+  saveLessons(arr);
+}
+
+// 从 LLM 回复里抽取纯 JS 代码（去掉 ```js 围栏和解释）
+function extractCode(text){
+  if(!text) return '';
+  // 优先取 ```js ... ``` 或 ``` ... ``` 块
+  const m = text.match(/```(?:js|javascript)?\s*([\s\S]*?)```/i);
+  let code = m ? m[1] : text;
+  return code.trim();
+}
+
+// 安全校验：编译 + 试跑 5 回合
+function validateCode(code, name){
+  let aiFn;
+  aiFn = compileAI(code, name||'测试');        // 编译失败会抛错
+  const test = new SnakeGame([
+    {id:'t1',name:name||'测试',color:'#fff',ai:aiFn},
+    {id:'t2',name:'陪练',color:'#888',ai:BUILTIN_AIS.wanderer}
+  ],{maxTurns:5});
+  for(let i=0;i<5;i++) test.step();              // 运行报错会抛错
+  return aiFn;
+}
+
+/* ---------- 自动模式：直接调用大模型 API ---------- */
+const LLM_CFG_KEY = 'snake_llm_cfg';
+function loadLlmCfg(){
+  try{ return JSON.parse(localStorage.getItem(LLM_CFG_KEY)||'{}'); }catch(e){ return {}; }
+}
+function saveLlmCfg(cfg){
+  try{ localStorage.setItem(LLM_CFG_KEY, JSON.stringify(cfg)); }catch(e){}
+}
+// 调用 OpenAI 兼容接口（DeepSeek / 通义 / OpenAI 等）
+async function callLLM(prompt){
+  const cfg = loadLlmCfg();
+  if(!cfg.apiKey || !cfg.baseUrl){
+    throw new Error('未配置 API，请先在「⚙️ 配置大模型」中填写');
+  }
+  const resp = await fetch(cfg.baseUrl.replace(/\/$/,'') + '/chat/completions', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+cfg.apiKey },
+    body: JSON.stringify({
+      model: cfg.model || 'deepseek-chat',
+      messages:[
+        {role:'system', content:'你是顶级的贪吃蛇对战 AI 工程师。严格按用户要求的输出格式作答。'},
+        {role:'user', content: prompt}
+      ],
+      temperature: 0.3
+    })
+  });
+  if(!resp.ok){
+    const t = await resp.text().catch(()=> '');
+    throw new Error('API 返回 '+resp.status+' '+t.slice(0,200));
+  }
+  const data = await resp.json();
+  return data.choices && data.choices[0] && data.choices[0].message.content || '';
+}
+
+// 通用：弹出"复制 prompt"对话框（半自动模式）
+// opts: { showAppearance:bool 是否显示蛇名/颜色, defaultName, defaultColor }
+function showPromptModal(title, prompt, onPasteBack, opts={}){
+  const wrap = document.getElementById('modal-eo');
+  document.getElementById('eo-title').textContent = title;
+  const body = document.getElementById('eo-body');
+  const appearance = opts.showAppearance ? `
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+      <input type="text" id="eo-name" class="small-input" style="width:150px;" placeholder="蛇名（可选）" value="${escapeHtml(opts.defaultName||'')}">
+      <label class="muted" style="font-size:12px;">颜色</label>
+      <input type="color" id="eo-color" value="${opts.defaultColor||'#34d399'}" style="width:40px;height:28px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;padding:2px;">
+      <button class="btn-primary" id="eo-apply" style="width:auto;flex:1;margin:0;">✅ 编译并应用</button>
+    </div>` : `
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+      <input type="text" id="eo-name" class="small-input" style="width:140px;" placeholder="蛇名（可选）" value="${escapeHtml(opts.defaultName||'')}">
+      <button class="btn-primary" id="eo-apply" style="width:auto;flex:1;margin:0;">✅ 编译并应用</button>
+    </div>`;
+  body.innerHTML = `
+    <p class="muted" style="line-height:1.6;margin-bottom:8px;">把下面这段提示词复制给任意 AI（含本对话），它会返回一段 JS 代码，再贴回下方输入框点「编译并应用」。</p>
+    <div style="display:flex;gap:8px;margin-bottom:6px;">
+      <button class="btn-sm" id="eo-copy" style="background:var(--accent2);color:#fff;border-color:var(--accent2);">📋 复制提示词</button>
+      <button class="btn-sm" id="eo-auto">⚡ 自动调用大模型</button>
+    </div>
+    <textarea id="eo-prompt" style="min-height:120px;">${escapeHtml(prompt)}</textarea>
+    <h3 style="margin-top:12px;">把 AI 返回的代码贴这里：</h3>
+    <textarea id="eo-result" placeholder="// 粘贴 AI 返回的 move(state) 代码（可含 \`\`\`js 围栏，会自动清理）"></textarea>
+    ${appearance}
+    <div id="eo-msg" class="muted" style="margin-top:8px;font-size:11px;"></div>`;
+  wrap.classList.add('show');
+
+  document.getElementById('eo-copy').onclick=()=>{
+    navigator.clipboard.writeText(prompt).then(()=>toast('提示词已复制')).catch(()=>{
+      const ta=document.getElementById('eo-prompt'); ta.select(); document.execCommand('copy'); toast('提示词已复制');
+    });
+  };
+  document.getElementById('eo-auto').onclick=async ()=>{
+    const msg=document.getElementById('eo-msg');
+    try{
+      msg.textContent='⏳ 正在调用大模型…';
+      const out = await callLLM(document.getElementById('eo-prompt').value);
+      document.getElementById('eo-result').value = out;
+      msg.textContent='✅ 已返回，请检查后点「编译并应用」';
+    }catch(e){ msg.textContent='❌ '+e.message; }
+  };
+  document.getElementById('eo-apply').onclick=()=>{
+    const msg=document.getElementById('eo-msg');
+    const raw=document.getElementById('eo-result').value;
+    const code=extractCode(raw);
+    if(!code){ msg.textContent='❌ 没有可用代码'; return; }
+    const nm=document.getElementById('eo-name').value.trim();
+    const colorEl=document.getElementById('eo-color');
+    const color=colorEl?colorEl.value:null;
+    try{
+      const aiFn=validateCode(code, nm);
+      onPasteBack(code, aiFn, nm, color);
+      msg.textContent='✅ 已应用';
+      setTimeout(()=> wrap.classList.remove('show'), 600);
+    }catch(e){ msg.textContent='❌ 代码有误：'+e.message; }
+  };
+}
+
+// 入口1：中文造蛇
+function openCreateByText(){
+  const desc = (document.getElementById('zh-desc')||{}).value;
+  const text = (desc||'').trim();
+  if(!text){ toast('请先用中文描述策略'); return; }
+  const chosenName = (document.getElementById('zh-name')||{}).value || '';
+  const chosenColor = (document.getElementById('zh-color')||{}).value || PALETTE[roster.length % PALETTE.length];
+  const prompt = buildCreatePrompt(text);
+  showPromptModal('✍️ 中文造蛇 · 生成提示词', prompt, (code, aiFn, nm, color)=>{
+    const name = (nm && nm.trim()) || '中文蛇'+(roster.length+1);
+    const c = color || chosenColor || PALETTE[roster.length % PALETTE.length];
+    addRoster(name, c, code, aiFn);
+    toast('✅ 已生成新蛇：'+name);
+  }, { showAppearance:true, defaultName:chosenName.trim(), defaultColor:chosenColor });
+}
+
+// 入口2：诊断报告
+function openDiagReport(ids){
+  ids = ids && ids.length ? ids : lastBatchIds;
+  if(!ids || !ids.length){ toast('请先跑一次批量场'); return; }
+  const wrap=document.getElementById('modal-diag');
+  const titleEl=document.querySelector('#modal-diag h2');
+  if(titleEl) titleEl.textContent='📈 批量赛诊断报告';
+  const body=document.getElementById('diag-body');
+  let html='<p class="muted" style="margin-bottom:12px;">每条蛇在本轮批量赛 N 场中的死因分布占比、抢食效率与胜率。点「🧬 一键进化」可针对弱点改进代码。</p>';
+  ids.forEach(id=>{
+    const p=roster.find(x=>x.id===id);
+    if(!p || !p.diag || !p.diag.plays) return;
+    const s=summarizeDiag(p);
+    html += `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span class="dot" style="background:${p.color}"></span>
+          <b style="font-size:14px;">${escapeHtml(p.name)}</b>
+          <span class="muted" style="margin-left:auto;">${s.plays} 场</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12px;">
+          <span>胜率：<b style="color:var(--accent)">${s.winRate}</b></span>
+          <span>存活到终局：<b>${s.surviveRate}</b></span>
+          <span>平均长度：<b>${s.avgLen}</b></span>
+          <span>平均存活回合：<b>${s.avgSurvTurns}</b></span>
+        </div>
+        <div style="margin-top:8px;font-size:12px;">死因分布：
+          <span class="badge">撞墙 ${s.deathBreak.撞墙}</span>
+          <span class="badge">撞自己 ${s.deathBreak.撞自己}</span>
+          <span class="badge">撞蛇 ${s.deathBreak.撞蛇}</span>
+          <span class="badge">头碰头 ${s.deathBreak.头碰头}</span>
+          <span class="badge">困死饿死 ${s.deathBreak.困死饿死}</span>
+        </div>
+        <div style="margin-top:6px;font-size:12px;">抢食：
+          <span class="badge">包子 ${s.food.包子}</span>
+          <span class="badge">蟠桃 ${s.food.蟠桃}</span>
+          <span class="badge" style="color:var(--red)">误吃毒 ${s.food.误吃毒蜘蛛}</span>
+          <span class="badge">场均 ${s.foodPerGame}</span>
+        </div>
+        <button class="btn-sm" data-evolve="${p.id}" style="margin-top:10px;background:var(--accent2);color:#fff;border-color:var(--accent2);">🧬 一键进化这条蛇</button>
+      </div>`;
+  });
+  body.innerHTML = html || '<p class="muted">本轮批量赛暂无可统计数据</p>';
+  body.querySelectorAll('[data-evolve]').forEach(b=>{
+    b.onclick=()=> evolveSnake(b.getAttribute('data-evolve'));
+  });
+  wrap.classList.add('show');
+}
+
+// 入口2b：单场失败分布（基于单场 result，每条蛇只有一个结局，占比为 100% 或 0%）
+function openSingleReport(res){
+  res = res || lastSingleRes;
+  if(!res || !res.length){ toast('请先跑一场单场对战'); return; }
+  const wrap=document.getElementById('modal-diag');
+  const titleEl=document.querySelector('#modal-diag h2');
+  if(titleEl) titleEl.textContent='📊 本场对战失败分布';
+  const body=document.getElementById('diag-body');
+  // 本场死亡总数（用于"占所有死亡比例"）
+  const deadList = res.filter(r=>!r.alive);
+  const totalDead = deadList.length;
+  // 死因→颜色，用于分布条
+  const REASON_COLORS={ '撞墙':'#e24b4a','撞自己':'#ba7517','撞蛇':'#d4537e','头碰头':'#534ab7','体力耗尽':'#888780','存活':'#1d9e75' };
+  let html=`<p class="muted" style="margin-bottom:12px;">本场共 ${res.length} 条蛇，其中 ${totalDead} 条死亡、${res.length-totalDead} 条存活到终局。下方为各蛇本场结局与全场死因占比。</p>`;
+  // 全场死因占比条
+  const reasonCount={};
+  res.forEach(r=>{ const k=r.alive?'存活':r.deathReason; reasonCount[k]=(reasonCount[k]||0)+1; });
+  html += `<div style="margin-bottom:8px;font-size:12px;">全场结局分布：</div>
+    <div style="display:flex;height:12px;border-radius:5px;overflow:hidden;margin-bottom:6px;">`;
+  Object.keys(reasonCount).forEach(k=>{
+    const pct=100*reasonCount[k]/res.length;
+    html += `<div title="${k} ${pct.toFixed(0)}%" style="width:${pct}%;background:${REASON_COLORS[k]||'#888'}"></div>`;
+  });
+  html += `</div><div class="muted" style="font-size:11px;margin-bottom:14px;">`+
+    Object.keys(reasonCount).map(k=>`${k} ${(100*reasonCount[k]/res.length).toFixed(0)}%`).join(' · ')+`</div>`;
+  // 每条蛇一张卡
+  res.forEach(r=>{
+    const reason = r.alive ? '存活到终局' : r.deathReason;
+    const shareOfDeaths = (!r.alive && totalDead) ? (100/totalDead).toFixed(0)+'%' : (r.alive?'—':'100%');
+    const p=roster.find(x=>x.id===r.id);
+    const color=(p&&p.color)||r.color||'#888';
+    html += `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span class="dot" style="background:${color}"></span>
+          <b style="font-size:14px;">${escapeHtml(r.name)}</b>
+          <span class="badge" style="margin-left:auto;color:${r.alive?'var(--green)':'var(--red)'}">${r.alive?'🏆 第'+r.rank+'名':'第'+r.rank+'名'}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12px;">
+          <span>结局：<b style="color:${r.alive?'var(--green)':'var(--red)'}">${reason}</b></span>
+          <span>占全场死亡：<b>${shareOfDeaths}</b></span>
+          <span>最终长度：<b>${r.length}</b></span>
+          <span>存活回合：<b>${r.survivedTurns}</b>${r.alive?'':' (第'+r.deathTurn+'回合阵亡)'}</span>
+        </div>
+        <div style="margin-top:8px;font-size:12px;">本场抢食：
+          <span class="badge">包子 ${r.bunEaten||0}</span>
+          <span class="badge">蟠桃 ${r.peachEaten||0}</span>
+          <span class="badge" style="color:var(--red)">误吃毒 ${r.spiderEaten||0}</span>
+        </div>
+      </div>`;
+  });
+  body.innerHTML = html;
+  wrap.classList.add('show');
+}
+
+// 入口3：一键进化某条蛇（含改进意见 + 经验规律总结 + 本地保存）
+function evolveSnake(id){
+  const p=roster.find(x=>x.id===id);
+  if(!p){ toast('找不到这条蛇'); return; }
+  if(!p.code || !/function|=>|move|return/.test(p.code)){
+    toast('这条蛇暂无可读源码，无法进化'); return;
+  }
+  if(!p.diag || !p.diag.plays){ toast('请先让它跑一轮批量赛'); return; }
+  const summary=summarizeDiag(p);
+  const prompt=buildEvolvePrompt(summary, p.code);
+  // 先关掉诊断报告弹窗，否则它会盖在进化弹窗上面（同 z-index）
+  document.getElementById('modal-diag').classList.remove('show');
+  showEvolveModal(p, summary, prompt);
+}
+
+// 进化专用弹窗：解析三段式（改进意见 / 经验规律 / 改进代码），可应用代码并存档经验
+function showEvolveModal(snake, summary, prompt){
+  const wrap=document.getElementById('modal-eo');
+  document.getElementById('eo-title').textContent='🧬 一键进化 · '+snake.name;
+  const body=document.getElementById('eo-body');
+  body.innerHTML=`
+    <p class="muted" style="line-height:1.6;margin-bottom:8px;">
+      把提示词复制给任意 AI（含本对话），或点「⚡ 自动调用」。AI 会返回三段：改进意见、经验规律、改进代码。
+    </p>
+    <div style="display:flex;gap:8px;margin-bottom:6px;">
+      <button class="btn-sm" id="eo-copy" style="background:var(--accent2);color:#fff;border-color:var(--accent2);">📋 复制提示词</button>
+      <button class="btn-sm" id="eo-auto">⚡ 自动调用大模型</button>
+    </div>
+    <textarea id="eo-prompt" style="min-height:90px;">${escapeHtml(prompt)}</textarea>
+    <h3 style="margin-top:12px;">把 AI 返回的内容贴这里（含三段格式）：</h3>
+    <textarea id="eo-result" placeholder="// 粘贴 AI 返回的完整内容（### 改进意见 / ### 经验规律 / ### 改进代码）"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button class="btn-sm" id="eo-parse" style="flex:1;">🔍 解析返回内容</button>
+      <button class="btn-primary" id="eo-apply" style="width:auto;flex:1;margin:0;">✅ 应用并存档经验</button>
+    </div>
+    <div id="eo-parsed" style="margin-top:12px;display:none;">
+      <h3>💡 改进意见</h3>
+      <div id="eo-advice" class="muted" style="white-space:pre-wrap;font-size:12px;line-height:1.6;padding:8px;background:var(--panel2);border-radius:6px;"></div>
+      <h3 style="margin-top:10px;">📚 经验规律</h3>
+      <div id="eo-lessons" class="muted" style="white-space:pre-wrap;font-size:12px;line-height:1.6;padding:8px;background:var(--panel2);border-radius:6px;"></div>
+      <h3 style="margin-top:10px;">🧩 改进代码（预览）</h3>
+      <pre id="eo-code-preview" style="max-height:160px;overflow:auto;"></pre>
+    </div>
+    <div id="eo-msg" class="muted" style="margin-top:8px;font-size:11px;"></div>`;
+  wrap.classList.add('show');
+
+  let parsed = { advice:'', lessons:'', code:'' };
+
+  function doParse(){
+    const raw=document.getElementById('eo-result').value;
+    parsed = parseEvolveReply(raw);
+    const box=document.getElementById('eo-parsed');
+    box.style.display='block';
+    document.getElementById('eo-advice').textContent = parsed.advice || '（未识别到「改进意见」段，AI 可能未按格式输出）';
+    document.getElementById('eo-lessons').textContent = parsed.lessons || '（未识别到「经验规律」段）';
+    document.getElementById('eo-code-preview').textContent = parsed.code || '（未识别到代码）';
+    return parsed;
+  }
+
+  document.getElementById('eo-copy').onclick=()=>{
+    navigator.clipboard.writeText(prompt).then(()=>toast('提示词已复制')).catch(()=>{
+      const ta=document.getElementById('eo-prompt'); ta.select(); document.execCommand('copy'); toast('提示词已复制');
+    });
+  };
+  document.getElementById('eo-auto').onclick=async ()=>{
+    const msg=document.getElementById('eo-msg');
+    const cfg=loadLlmCfg();
+    if(!cfg.apiKey || !cfg.baseUrl){
+      msg.innerHTML='⚠️ 尚未配置大模型，无法自动调用。请点顶栏「⚙️ 配置大模型」填写后重试；或用「📋 复制提示词」走手动模式。 <span class="link" id="eo-gocfg">立即配置 →</span>';
+      const go=document.getElementById('eo-gocfg');
+      if(go) go.onclick=()=>{
+        const c=loadLlmCfg();
+        document.getElementById('cfg-baseurl').value=c.baseUrl||'https://api.deepseek.com/v1';
+        document.getElementById('cfg-model').value=c.model||'deepseek-chat';
+        document.getElementById('cfg-apikey').value=c.apiKey||'';
+        document.getElementById('modal-llm').classList.add('show');
+      };
+      return;
+    }
+    try{
+      msg.textContent='⏳ 正在调用大模型…';
+      const out=await callLLM(document.getElementById('eo-prompt').value);
+      document.getElementById('eo-result').value=out;
+      doParse();
+      msg.textContent='✅ 已返回并解析，确认后点「应用并存档经验」';
+    }catch(e){ msg.textContent='❌ 调用失败：'+e.message; }
+  };
+  document.getElementById('eo-parse').onclick=()=>{ doParse(); };
+  document.getElementById('eo-apply').onclick=()=>{
+    const msg=document.getElementById('eo-msg');
+    const r = (parsed.code) ? parsed : doParse();
+    if(!r.code){ msg.textContent='❌ 没解析到可用代码'; return; }
+    try{
+      const aiFn=validateCode(r.code, snake.name);
+      // 应用新代码
+      snake.code = r.code;
+      snake.ai = aiFn;
+      snake.diag = newDiag();
+      if(game){ const gs=game.snakes.find(s=>s.id===snake.id); if(gs) gs.color=snake.color; }
+      renderRoster(); renderSelectList();
+      persistRoster();   // 进化后的代码持久化到本地，刷新不丢失
+      poolNewGeneration(snake.name);   // 数据池为该蛇开启新一代，便于对比进化前后
+      // 存档经验到本地库
+      addLessonRecord({
+        time: new Date().toLocaleString('zh-CN'),
+        snake: snake.name,
+        beforeWinRate: summary.winRate,
+        beforeDeath: summary.deathBreak,
+        advice: r.advice,
+        lessons: r.lessons,
+      });
+      msg.textContent='✅ 已进化并存档经验，重新跑批量赛验证效果';
+      toast('✅ '+snake.name+' 已进化，经验已存档');
+      setTimeout(()=> wrap.classList.remove('show'), 900);
+    }catch(e){ msg.textContent='❌ 代码有误：'+e.message; }
+  };
+}
+
+/* ---------- 元规律：把全部历史经验交给 LLM 二次提炼 ---------- */
+const META_KEY = 'snake_meta_rules';
+function loadMeta(){ try{ return JSON.parse(localStorage.getItem(META_KEY)||'null'); }catch(e){ return null; } }
+function saveMeta(obj){ try{ localStorage.setItem(META_KEY, JSON.stringify(obj)); }catch(e){} }
+
+// 把所有历史经验拼成"二次提炼"的 prompt
+// 把全局对战数据池浓缩成"客观统计"语料（与主观经验互为印证）
+function poolCorpusForSynthesis(){
+  const pool=loadPool();
+  const names=Object.keys(pool).filter(k=>!k.startsWith('_'));
+  if(!names.length) return '';
+  const totalMatches=(pool._meta&&pool._meta.totalMatches)||0;
+  const tdc=topDeathCause();
+  // 每条蛇的总聚合 + 历代趋势
+  const lines=names.map(name=>{
+    const node=pool[name];
+    const t=aggSummary(node.total);
+    let s=`· ${name}（${t.plays}场）：胜率${t.winRate.toFixed(0)}% 存活${t.surviveRate.toFixed(0)}% 均长${t.avgLen.toFixed(1)} | 死因 困死${t.deathPct.困死饿死.toFixed(0)}%/头碰头${t.deathPct.头碰头.toFixed(0)}%/撞蛇${t.deathPct.撞蛇.toFixed(0)}%/撞墙${t.deathPct.撞墙.toFixed(0)}%/撞自己${t.deathPct.撞自己.toFixed(0)}% | 场均吃食${t.foodPerGame.toFixed(1)} 误吃毒${t.spider}`;
+    const gens=(node.gens||[]).filter(g=>g.plays>0);
+    if(gens.length>1){
+      s+='\n    历代胜率趋势：'+gens.map((g,i)=>'第'+(i+1)+'代'+aggSummary(g).winRate.toFixed(0)+'%').join(' → ');
+    }
+    return s;
+  }).join('\n');
+  return `全局对战数据池（累计 ${totalMatches} 场，全局头号死因「${tdc.cause}」占 ${tdc.pct}%）：\n${lines}`;
+}
+
+function buildSynthesizePrompt(){
+  const arr=loadLessons();
+  const corpus = arr.map((r,i)=>{
+    let s = `【记录 ${arr.length-i}｜${r.snake||''}｜进化前胜率 ${r.beforeWinRate||'-'}】\n`;
+    if(r.advice) s += '改进意见：\n'+r.advice+'\n';
+    if(r.lessons) s += '经验规律：\n'+r.lessons+'\n';
+    return s;
+  }).join('\n');
+  const poolCorpus = poolCorpusForSynthesis();
+  const poolBlock = poolCorpus ? `\n\n另外，这是平台累计的客观对战统计数据（量化事实，用来与上面主观经验互相印证、纠偏）：\n"""\n${poolCorpus}\n"""\n请在提炼时：对照统计数据验证每条经验是否真的有效（例如某经验声称降低了某死因，就看数据池里该死因占比是否真的下降）；优先采信"既被多条经验提到、又被统计数据支持"的规律；指出经验与数据矛盾之处。` : '';
+
+  return `你是一位贪吃蛇对战 AI 的策略研究专家。下面有两类材料：①历次「一键进化」中 AI 总结的零散改进意见与经验规律（共 ${arr.length} 条，主观）；②平台累计的全局对战统计（客观）。
+
+请综合二者做二次提炼，归纳成一套高层、去重、成体系、且被数据验证过的"元规律"，供以后编写/改进贪吃蛇 AI 时直接参照。要求：
+- 合并重复或相似的经验，提炼出背后的共性原理。
+- 用客观统计数据校验主观经验：数据支持的规律加强、数据不支持或矛盾的要标注存疑。
+- 按主题分类（如：生存与空间、抢食与发育、对抗与避让、HP 管理 等）。
+- 每条元规律要可操作、可落地（能直接转化为代码策略），并尽量给出量化阈值。
+- 按重要性排序，最关键的放最前。
+
+主观经验语料：
+"""
+${corpus}
+"""${poolBlock}
+
+请严格按以下格式输出（Markdown），不要有多余寒暄：
+
+### 核心元规律
+（5~8 条最重要的、跨记录提炼且经数据印证的通用规律，每条一行，可带量化阈值；对存疑的标注"⚠存疑"）
+
+### 分主题策略
+（按主题分组，每组 2~4 条具体可落地的策略）
+
+### 数据洞察
+（2~3 条仅从统计数据中发现、而经验未提及的规律或反常现象）
+
+### 优先级建议
+（编写贪吃蛇 AI 时各目标的优先级排序，一句话总结决策原则）`;
+}
+
+// 经验库弹窗：查看 / 二次提炼 / 导出 / 清空
+function openLessonBook(){
+  const wrap=document.getElementById('modal-lesson');
+  const body=document.getElementById('lesson-body');
+  const arr=loadLessons();
+  const meta=loadMeta();
+
+  let html='';
+  // 顶部：二次提炼区
+  html += `
+    <div style="border:1px solid var(--accent);border-radius:8px;padding:12px;margin-bottom:14px;background:rgba(47,129,247,0.06);">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <b style="font-size:13px;">🧠 元规律提炼</b>
+        <span class="muted" style="font-size:11px;">把 ${arr.length} 条经验 + 全局对战数据一起交给大模型，归纳成被数据印证的高层规律</span>
+        <button class="btn-sm" id="meta-gen" style="margin-left:auto;background:var(--accent2);color:#fff;border-color:var(--accent2);">✨ 生成元规律</button>
+      </div>
+      <div id="meta-box" style="margin-top:10px;${meta?'':'display:none;'}">
+        <div class="muted" style="font-size:11px;margin-bottom:6px;">${meta?('上次提炼：'+escapeHtml(meta.time||'')+'（基于 '+(meta.count||0)+' 条经验）'):''}
+          <span class="link" id="meta-export" style="margin-left:8px;">📥 导出元规律</span>
+        </div>
+        <div id="meta-content" class="muted" style="white-space:pre-wrap;font-size:12px;line-height:1.7;padding:10px;background:var(--panel2);border-radius:6px;">${meta?escapeHtml(meta.text||''):''}</div>
+      </div>
+      <div id="meta-msg" class="muted" style="font-size:11px;margin-top:6px;"></div>
+    </div>`;
+
+  // 历史经验列表
+  if(!arr.length){
+    html+='<p class="muted">还没有沉淀任何经验。进化任意一条蛇后，AI 总结的经验规律会自动保存到这里。</p>';
+  }else{
+    html+='<h3 style="margin-bottom:8px;">历史经验（'+arr.length+' 条）</h3>';
+    html += arr.map((r,i)=>`
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <b style="font-size:13px;">#${arr.length-i} ${escapeHtml(r.snake||'')}</b>
+          <span class="muted" style="margin-left:auto;font-size:11px;">${escapeHtml(r.time||'')} · 进化前胜率 ${escapeHtml(r.beforeWinRate||'-')}</span>
+        </div>
+        ${r.advice?`<div style="font-size:12px;margin-bottom:6px;"><b>💡 改进意见</b><div class="muted" style="white-space:pre-wrap;line-height:1.6;">${escapeHtml(r.advice)}</div></div>`:''}
+        ${r.lessons?`<div style="font-size:12px;"><b>📚 经验规律</b><div class="muted" style="white-space:pre-wrap;line-height:1.6;">${escapeHtml(r.lessons)}</div></div>`:''}
+      </div>`).join('');
+  }
+  body.innerHTML = html;
+
+  // 绑定导出 / 清空
+  document.getElementById('lesson-export').onclick=exportLessons;
+  document.getElementById('lesson-clear').onclick=()=>{
+    if(confirm('确定清空所有经验记录？此操作不可恢复。')){ saveLessons([]); saveMeta(null); openLessonBook(); toast('经验库已清空'); }
+  };
+  // 元规律导出
+  const me=document.getElementById('meta-export');
+  if(me) me.onclick=exportMeta;
+  // 二次提炼
+  document.getElementById('meta-gen').onclick=()=>{
+    const poolNames=Object.keys(loadPool()).filter(k=>!k.startsWith('_'));
+    if(!arr.length && !poolNames.length){ toast('暂无经验也无对战数据，先进化或跑几场赛'); return; }
+    const prompt=buildSynthesizePrompt();
+    showSynthesizeModal(prompt, arr.length);
+  };
+  wrap.classList.add('show');
+}
+
+// 二次提炼弹窗：复制/自动调用，结果落库展示
+function showSynthesizeModal(prompt, count){
+  document.getElementById('modal-lesson').classList.remove('show'); // 避免遮挡
+  const wrap=document.getElementById('modal-eo');
+  document.getElementById('eo-title').textContent='🧠 元规律提炼';
+  const body=document.getElementById('eo-body');
+  body.innerHTML=`
+    <p class="muted" style="line-height:1.6;margin-bottom:8px;">把提示词复制给任意 AI（含本对话），或点「⚡ 自动调用」。AI 会把 ${count} 条零散经验归纳为成体系的元规律。</p>
+    <div style="display:flex;gap:8px;margin-bottom:6px;">
+      <button class="btn-sm" id="syn-copy" style="background:var(--accent2);color:#fff;border-color:var(--accent2);">📋 复制提示词</button>
+      <button class="btn-sm" id="syn-auto">⚡ 自动调用大模型</button>
+    </div>
+    <textarea id="syn-prompt" style="min-height:90px;">${escapeHtml(prompt)}</textarea>
+    <h3 style="margin-top:12px;">把 AI 返回的元规律贴这里：</h3>
+    <textarea id="syn-result" placeholder="// 粘贴 AI 归纳的元规律内容"></textarea>
+    <button class="btn-primary" id="syn-save" style="margin-top:8px;">💾 保存为元规律</button>
+    <div id="syn-msg" class="muted" style="margin-top:8px;font-size:11px;"></div>`;
+  wrap.classList.add('show');
+
+  document.getElementById('syn-copy').onclick=()=>{
+    navigator.clipboard.writeText(prompt).then(()=>toast('提示词已复制')).catch(()=>{
+      const ta=document.getElementById('syn-prompt'); ta.select(); document.execCommand('copy'); toast('提示词已复制');
+    });
+  };
+  document.getElementById('syn-auto').onclick=async ()=>{
+    const msg=document.getElementById('syn-msg');
+    const cfg=loadLlmCfg();
+    if(!cfg.apiKey || !cfg.baseUrl){
+      msg.innerHTML='⚠️ 尚未配置大模型。请点顶栏「⚙️ 配置大模型」填写后重试，或用「📋 复制提示词」走手动模式。';
+      return;
+    }
+    try{
+      msg.textContent='⏳ 正在提炼…';
+      const out=await callLLM(document.getElementById('syn-prompt').value);
+      document.getElementById('syn-result').value=out;
+      msg.textContent='✅ 已返回，检查后点「保存为元规律」';
+    }catch(e){ msg.textContent='❌ 调用失败：'+e.message; }
+  };
+  document.getElementById('syn-save').onclick=()=>{
+    const txt=document.getElementById('syn-result').value.trim();
+    if(!txt){ document.getElementById('syn-msg').textContent='❌ 内容为空'; return; }
+    saveMeta({ text:txt, time:new Date().toLocaleString('zh-CN'), count:count });
+    toast('✅ 元规律已保存');
+    wrap.classList.remove('show');
+    openLessonBook();   // 回到经验库展示新元规律
+  };
+}
+
+// 导出元规律
+function exportMeta(){
+  const meta=loadMeta();
+  if(!meta||!meta.text){ toast('暂无元规律'); return; }
+  const md='# 🧠 贪吃蛇 AI 元规律\n\n> 由经验库二次提炼，'+(meta.time||'')+'（基于 '+(meta.count||0)+' 条经验）\n\n'+meta.text+'\n';
+  const blob=new Blob([md],{type:'text/markdown;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='snake_ai_meta_rules.md';
+  a.click();
+  toast('已导出元规律 Markdown');
+}
+
+/* ============================================================
+   数据分析面板：对全局数据池做聚合统计，自动定位最该进化的蛇
+   ============================================================ */
+// 把某蛇的聚合数据浓缩成可读指标
+function aggSummary(agg){
+  const n = agg.plays || 1;
+  const totalDeath = agg.deaths.撞墙+agg.deaths.撞自己+agg.deaths.撞蛇+agg.deaths.头碰头+agg.deaths.体力耗尽;
+  const td = totalDeath || 1;
+  return {
+    plays: agg.plays,
+    winRate: 100*agg.wins/n,
+    surviveRate: 100*agg.survives/n,
+    avgLen: agg.sumLen/n,
+    deathPct: {
+      撞墙: 100*agg.deaths.撞墙/td, 撞自己: 100*agg.deaths.撞自己/td,
+      撞蛇: 100*agg.deaths.撞蛇/td, 头碰头: 100*agg.deaths.头碰头/td,
+      困死饿死: 100*agg.deaths.体力耗尽/td,
+    },
+    foodPerGame: (agg.bun+agg.peach)/n,
+    spider: agg.spider,
+  };
+}
+// 找全局最致命死因
+function topDeathCause(){
+  const pool=loadPool(); const sum={撞墙:0,撞自己:0,撞蛇:0,头碰头:0,体力耗尽:0};
+  Object.keys(pool).forEach(k=>{ if(k.startsWith('_'))return; const d=pool[k].total.deaths;
+    for(const r in sum) sum[r]+=d[r]||0; });
+  let best='-',bv=-1,total=0; for(const r in sum){ total+=sum[r]; if(sum[r]>bv){bv=sum[r];best=r;} }
+  return { cause: best==='体力耗尽'?'困死/饿死':best, pct: total?(100*bv/total).toFixed(0):0, total };
+}
+// 死因 → 配色（与单场报告一致）
+const DEATH_COLORS={ 撞墙:'#e24b4a', 撞自己:'#ba7517', 撞蛇:'#d4537e', 头碰头:'#534ab7', 困死饿死:'#888780' };
+const DEATH_ORDER=['困死饿死','头碰头','撞蛇','撞墙','撞自己'];
+// 汇总全局死因总数（按显示名）
+function globalDeathStats(){
+  const pool=loadPool(); const raw={撞墙:0,撞自己:0,撞蛇:0,头碰头:0,体力耗尽:0};
+  Object.keys(pool).forEach(k=>{ if(k.startsWith('_'))return; const d=pool[k].total.deaths;
+    for(const r in raw) raw[r]+=d[r]||0; });
+  const m={ 困死饿死:raw.体力耗尽, 头碰头:raw.头碰头, 撞蛇:raw.撞蛇, 撞墙:raw.撞墙, 撞自己:raw.撞自己 };
+  const total=DEATH_ORDER.reduce((a,k)=>a+m[k],0);
+  return { counts:m, total };
+}
+// 渲染一条堆叠死因分布条 + 文字图例（pctMap: 各死因占比%，counts 可选用于 tooltip）
+function deathBarHtml(pctMap, counts){
+  const seg=DEATH_ORDER.map(k=>{
+    const pct=pctMap[k]||0; if(pct<=0) return '';
+    const tip=counts? (k+' '+pct.toFixed(0)+'%（'+(counts[k]||0)+'次）') : (k+' '+pct.toFixed(0)+'%');
+    return `<div title="${tip}" style="width:${pct}%;background:${DEATH_COLORS[k]};"></div>`;
+  }).join('');
+  const legend=DEATH_ORDER.filter(k=>(pctMap[k]||0)>0).map(k=>
+    `<span style="display:inline-flex;align-items:center;gap:3px;margin-right:10px;"><span style="width:8px;height:8px;border-radius:2px;background:${DEATH_COLORS[k]};display:inline-block;"></span>${k} ${(pctMap[k]||0).toFixed(0)}%</span>`
+  ).join('');
+  return `<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;margin:4px 0;background:var(--panel2);">${seg||'<div style="flex:1;background:var(--panel2)"></div>'}</div>
+    <div class="muted" style="font-size:11px;line-height:1.8;">${legend||'暂无死亡记录（全员存活）'}</div>`;
+}
+
+function openAnalysis(){
+  const wrap=document.getElementById('modal-analysis');
+  const body=document.getElementById('analysis-body');
+  const pool=loadPool();
+  const names=Object.keys(pool).filter(k=>!k.startsWith('_'));
+  if(!names.length){
+    body.innerHTML='<p class="muted">数据池为空。跑几场单场/批量赛后，这里会自动累积分析数据。</p>';
+    wrap.classList.add('show'); return;
+  }
+  // 汇总每条蛇（展示用：胜率从大到小排序）
+  const rows = names.map(name=>{
+    const node=pool[name]; const s=aggSummary(node.total);
+    return { name, gen:node.gen||0, ...s, node };
+  }).filter(r=>r.plays>0).sort((a,b)=> b.winRate-a.winRate); // 胜率降序→最强在前
+  const tdc = topDeathCause();
+  const totalMatches = (pool._meta&&pool._meta.totalMatches)||0;
+
+  // 自动定位"最该进化的蛇"：取有源码、参战≥10、胜率最低者（不受展示排序影响）
+  const weakest = [...rows].sort((a,b)=>a.winRate-b.winRate).find(r=>{
+    const p=roster.find(x=>x.name===r.name);
+    return p && p.code && /function|=>|move|return/.test(p.code) && r.plays>=10;
+  }) || rows[rows.length-1];
+
+  let html = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+      <div style="flex:1;min-width:120px;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">
+        <div class="muted" style="font-size:11px;">累计对局</div><div style="font-size:20px;font-weight:600;">${totalMatches}</div></div>
+      <div style="flex:1;min-width:120px;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">
+        <div class="muted" style="font-size:11px;">参战蛇数</div><div style="font-size:20px;font-weight:600;">${names.length}</div></div>
+      <div style="flex:1;min-width:140px;border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">
+        <div class="muted" style="font-size:11px;">全局头号死因</div><div style="font-size:16px;font-weight:600;color:var(--red);">${tdc.cause} ${tdc.pct}%</div></div>
+    </div>`;
+
+  // 全局死因分布（所有蛇所有死亡的汇总）
+  const gd = globalDeathStats();
+  const gPct = {}; DEATH_ORDER.forEach(k=> gPct[k] = gd.total? 100*gd.counts[k]/gd.total : 0);
+  html += `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;margin-bottom:6px;">
+        <b style="font-size:13px;">💀 全局死因分布</b>
+        <span class="muted" style="margin-left:auto;font-size:11px;">共 ${gd.total} 次死亡</span>
+      </div>
+      ${deathBarHtml(gPct, gd.counts)}
+    </div>`;
+
+  // 最该进化的蛇 + 一键进化
+  if(weakest){
+    const wp=roster.find(x=>x.name===weakest.name);
+    html += `
+      <div style="border:1px solid var(--accent);border-radius:8px;padding:12px;margin-bottom:14px;background:rgba(47,129,247,0.06);">
+        <b style="font-size:13px;">🎯 建议优先进化：${escapeHtml(weakest.name)}</b>
+        <span class="muted" style="font-size:11px;margin-left:8px;">胜率最低（${weakest.winRate.toFixed(0)}%，${weakest.plays}场）</span>
+        ${wp?`<button class="btn-sm" id="ana-evolve" style="float:right;background:var(--accent2);color:#fff;border-color:var(--accent2);">🧬 基于全量数据进化</button>`:'<span class="muted" style="float:right;font-size:11px;">（该蛇已不在擂台）</span>'}
+      </div>`;
+  }
+
+  // 每条蛇一行：胜率条 + 死因 + 进化代数 + 各自的「基于全量数据进化」按钮
+  html += '<h3 style="margin-bottom:8px;">各蛇全局表现（按胜率降序）</h3>';
+  html += rows.map(r=>{
+    const p=roster.find(x=>x.name===r.name);
+    const color=(p&&p.color)||'#888';
+    const canEvolve = p && p.code && /function|=>|move|return/.test(p.code);
+    const evoBtn = canEvolve
+      ? `<button class="btn-sm" data-pool-evolve="${escapeHtml(r.name)}" style="background:var(--accent2);color:#fff;border-color:var(--accent2);">🧬 基于全量数据进化</button>`
+      : (p ? '<span class="muted" style="font-size:11px;">（无可读源码）</span>' : '<span class="muted" style="font-size:11px;">（已不在擂台）</span>');
+    return `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span class="dot" style="background:${color}"></span>
+          <b style="font-size:13px;">${escapeHtml(r.name)}</b>
+          ${r.gen?`<span class="badge">第${r.gen}代</span>`:''}
+          <span class="muted" style="margin-left:auto;font-size:11px;">${r.plays}场 · 均长${r.avgLen.toFixed(1)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span class="muted" style="font-size:11px;width:42px;">胜率</span>
+          <div style="flex:1;height:10px;background:var(--panel2);border-radius:5px;overflow:hidden;">
+            <div style="width:${r.winRate}%;height:100%;background:${r.winRate>40?'#3fb950':r.winRate>20?'#e3b341':'#f85149'};"></div></div>
+          <span style="font-size:12px;width:38px;text-align:right;">${r.winRate.toFixed(0)}%</span>
+        </div>
+        ${deathBarHtml(r.deathPct)}
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+          <span class="muted" style="font-size:11px;flex:1;">误吃毒 ${r.spider} · 场均吃食 ${r.foodPerGame.toFixed(1)}</span>
+          ${evoBtn}
+        </div>
+      </div>`;
+  }).join('');
+
+  body.innerHTML = html;
+  // 绑定顶部"建议优先进化"按钮
+  const ae=document.getElementById('ana-evolve');
+  if(ae && weakest){
+    ae.onclick=()=>{
+      const p=roster.find(x=>x.name===weakest.name);
+      if(!p){ toast('该蛇已不在擂台'); return; }
+      wrap.classList.remove('show');
+      evolveByPool(p);
+    };
+  }
+  // 绑定每条蛇各自的"基于全量数据进化"
+  body.querySelectorAll('[data-pool-evolve]').forEach(b=>{
+    b.onclick=()=>{
+      const nm=b.getAttribute('data-pool-evolve');
+      const p=roster.find(x=>x.name===nm);
+      if(!p){ toast('该蛇已不在擂台'); return; }
+      wrap.classList.remove('show');
+      evolveByPool(p);
+    };
+  });
+  // 顶部导出/清空
+  const pe=document.getElementById('pool-export'); if(pe) pe.onclick=exportPool;
+  const pc=document.getElementById('pool-clear'); if(pc) pc.onclick=clearPool;
+  wrap.classList.add('show');
+}
+
+// 导出数据池为 JSON
+function exportPool(){
+  const pool=loadPool();
+  if(!Object.keys(pool).filter(k=>!k.startsWith('_')).length){ toast('数据池为空'); return; }
+  const blob=new Blob([JSON.stringify(pool,null,2)],{type:'application/json;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='snake_data_pool.json'; a.click();
+  toast('已导出数据池 JSON');
+}
+function clearPool(){
+  if(!confirm('确定清空全局对战数据池？历史聚合统计将丢失。')) return;
+  localStorage.removeItem(POOL_KEY); openAnalysis(); toast('数据池已清空');
+}
+
+// 导出经验库为 Markdown
+function exportLessons(){
+  const arr=loadLessons();
+  if(!arr.length){ toast('经验库为空'); return; }
+  let md='# 🐍 贪吃蛇 AI 进化经验库\n\n> 由「一键进化」自动沉淀，共 '+arr.length+' 条\n\n';
+  arr.forEach((r,i)=>{
+    md+=`## ${arr.length-i}. ${r.snake||''}（${r.time||''}）\n\n`;
+    md+=`- 进化前胜率：${r.beforeWinRate||'-'}\n`;
+    if(r.advice) md+=`\n**改进意见**\n\n${r.advice}\n`;
+    if(r.lessons) md+=`\n**经验规律**\n\n${r.lessons}\n`;
+    md+='\n---\n\n';
+  });
+  const blob=new Blob([md],{type:'text/markdown;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='snake_ai_lessons.md';
+  a.click();
+  toast('已导出经验库 Markdown');
 }
 
 /* ============================================================
@@ -1197,7 +2926,7 @@ const RULES_HTML=`
   </ul>
   <h3>🍽️ 食物规则</h3>
   <ul>
-    <li>地图维持若干食物，被吃后随机补充。</li>
+    <li>地图维持若干食物，被吃后随机补充。三种食物的<b>生成比例可在右栏「🍽️ 食物比例」自定义</b>。</li>
     <li>蛇头进入食物格即吃到，身体 +1 节，<b>当回合尾巴不缩</b>。</li>
     <li>🥟 <b>包子</b>：长度 +1，HP 恢复 40 点。</li>
     <li>🍑 <b>蟠桃</b>：长度 +3，HP 恢复至 100。</li>
@@ -1294,6 +3023,7 @@ function bindEvents(){
       b.classList.add('active');
       const tab=b.getAttribute('data-tab');
       document.getElementById('tab-single').style.display = tab==='single'?'':'none';
+      document.getElementById('tab-zh').style.display = tab==='zh'?'':'none';
       document.getElementById('tab-batch').style.display = tab==='batch'?'':'none';
     };
   });
@@ -1307,6 +3037,18 @@ function bindEvents(){
   // add
   document.getElementById('btn-add').onclick=handleAdd;
   document.getElementById('btn-batch-add').onclick=handleBatchAdd;
+  // 中文造蛇
+  document.getElementById('btn-zh-create').onclick=openCreateByText;
+  // 食物比例
+  ['food-bun','food-peach','food-spider'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.oninput=renderFoodRatio;
+  });
+  document.getElementById('food-reset').onclick=()=>{
+    document.getElementById('food-bun').value=55;
+    document.getElementById('food-peach').value=15;
+    document.getElementById('food-spider').value=30;
+    renderFoodRatio(); toast('已恢复默认食物比例');
+  };
   // controls
   document.getElementById('btn-play').onclick=()=>{ if(!game) startSingleMatch(); startLoop(); };
   document.getElementById('btn-pause').onclick=stopLoop;
@@ -1330,16 +3072,52 @@ function bindEvents(){
   document.getElementById('spec-content').innerHTML=SPEC_HTML;
   document.getElementById('btn-rules').onclick=()=>document.getElementById('modal-rules').classList.add('show');
   document.getElementById('btn-spec').onclick=()=>document.getElementById('modal-spec').classList.add('show');
+  // 经验库
+  document.getElementById('btn-lesson').onclick=openLessonBook;
+  // 数据分析
+  document.getElementById('btn-analysis').onclick=openAnalysis;
+  // 重置擂台
+  document.getElementById('btn-reset-roster').onclick=resetRoster;
+  // 导出 / 导入全部存档
+  document.getElementById('btn-export-backup').onclick=exportBackup;
+  document.getElementById('btn-import-backup').onclick=()=> document.getElementById('import-file').click();
+  document.getElementById('import-file').onchange=function(){
+    if(this.files && this.files[0]) importBackup(this.files[0]);
+    this.value='';
+  };
+  // 大模型配置
+  document.getElementById('btn-llm-cfg').onclick=()=>{
+    const cfg=loadLlmCfg();
+    document.getElementById('cfg-baseurl').value=cfg.baseUrl||'https://api.deepseek.com/v1';
+    document.getElementById('cfg-model').value=cfg.model||'deepseek-chat';
+    document.getElementById('cfg-apikey').value=cfg.apiKey||'';
+    document.getElementById('modal-llm').classList.add('show');
+  };
+  document.getElementById('cfg-save').onclick=()=>{
+    saveLlmCfg({
+      baseUrl: document.getElementById('cfg-baseurl').value.trim(),
+      model: document.getElementById('cfg-model').value.trim(),
+      apiKey: document.getElementById('cfg-apikey').value.trim(),
+    });
+    toast('✅ 配置已保存（仅本浏览器）');
+    document.getElementById('modal-llm').classList.remove('show');
+  };
   document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{
     b.closest('.modal-mask').classList.remove('show');
   });
   document.querySelectorAll('.modal-mask').forEach(m=>m.onclick=(e)=>{ if(e.target===m) m.classList.remove('show'); });
 }
 
-// 启动
+// 启动：优先从本地恢复上次的擂台（含进化后的蛇），没有再用初始内置陪练
 bindEvents();
-seedBuiltins();
+if(!restoreRoster()){
+  seedBuiltins();
+}else{
+  // 恢复的是旧存档：补齐新版本新增的内置陪练（如🤖状态机FSM），不影响已有进化成果
+  ensureBuiltins();
+}
 drawGame(null);
+renderFoodRatio();
 // 默认勾选前两条蛇
 setTimeout(()=>{ const cs=document.querySelectorAll('.sel'); if(cs[0])cs[0].checked=true; if(cs[1])cs[1].checked=true; updateSelCount(); },50);
 </script>
