@@ -1634,6 +1634,9 @@ const BUILTIN_AIS = {
   //   2026-06-16 抢食强化(治"前期抢食不够易饿死")：①去掉多蛇期抢食0.8折(交gFood调节,发育期1.35更猛)；
   //     ②苟权重按血量渐进 avoidScale(HP>70不苟/55~70升/低血降至0.3/濒死0,即"吃饱了才苟")；
   //     ③多目标抢食 mcDirScore(对所有我领先的食物按方向递减累计,不再只盯单一目标)；④急食阈值 lowHp 55→65 前移。
+  //   2026-06-16 成熟度驱动丝滑过渡(治"开局即1v1 不发育"断崖)：新增 maturity(0~1,综合双方平均长度0.55+回合0.25+拥挤0.20)。
+  //     围棋大脑 endgameGain 改为 isEndgame×maturity 连续渐开(不再一进1v1就硬跳1.0)；ENDGAME阶段须 maturity>=0.5 才进；
+  //     gFood 在1v1按 maturity 于 1.2(发育)↔0.7(收官) 平滑过渡。→ 开局1v1先抢食发育、长大后才围杀；4→3→2递减同一套逻辑无断崖。
   genesisGoSagePro: function(state){
     var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
     var myLen=self.length,myHp=self.hp,myDir=self.dir,myBody=self.body;
@@ -1698,14 +1701,38 @@ const BUILTIN_AIS = {
     var nearestFoe=function(x,y){var m=99;for(var k=0;k<enemies.length;k++){var dd=Math.abs(enemies[k].x-x)+Math.abs(enemies[k].y-y);if(dd<m)m=dd;}return m;};
     var cx0=(W-1)/2,cy0=(H-1)/2;
 
-    // ====== 阶段门控 ======
-    var phase = (critHp || crowd>=8) ? 'SURVIVAL'
-              : (endgame && myLen>=foe.len) ? 'ENDGAME'
-              : ((myLen<8 || (myHp>60 && density>=3)) && !endgame) ? 'OPENING'
-              : 'MIDGAME';
+    // ====== 阶段门控（成熟度驱动的丝滑过渡）======
+    //   核心：是否开"围棋残局大脑"不只看"是否1v1"，还要看"局面成熟度 maturity"。
+    //   maturity=0(开局/双方都短/地图空) → 即使 1v1 也先发育抢食，不数地；
+    //   maturity→1(双方长大/回合推进/地图变挤) → 围棋大脑平滑全开收割。
+    //   这样"开局就1v1"和"4→3→2递减"都走同一套连续逻辑，无断崖。
+    var clamp01=function(v){ return v<0?0:(v>1?1:v); };
+    var turn = state.turn||0, maxT = state.maxTurns||1000;
+    var foeLen = foe ? foe.len : 0;
+    var avgLen = (myLen + foeLen)/2;
+    // 三个成熟度信号(各0~1)：双方平均长度、对局进程、局部拥挤度
+    var mLen   = clamp01((avgLen - 4)/9);       // 长度4→0, 13→1
+    var mTurn  = clamp01(turn/Math.min(260, maxT)); // 回合推进
+    var mCrowd = clamp01(crowd/6);              // 周围越挤越成熟(逼近残局缠斗)
+    // 综合成熟度：长度为主(0.55) + 回合(0.25) + 拥挤(0.20)
+    var maturity = clamp01(mLen*0.55 + mTurn*0.25 + mCrowd*0.20);
+
     var multiSnake = aliveN>=3;   // 多蛇期：四合一混战增强生效
-    var endgameGain = phase==='ENDGAME' ? 1.0 : (phase==='MIDGAME' && !multiSnake ? 0.15 : 0.0);
-    var gFood   = phase==='OPENING'?1.35 : phase==='SURVIVAL'?(critHp?1.6:0.8) : phase==='ENDGAME'?0.7 : 1.0;
+    var isEndgameRaw = endgame && myLen>=foe.len;   // 物理上1v1且我不弱(原 ENDGAME 条件)
+    // 阶段名(用于离散权重 gCenter/gSafe 等)：1v1 但未成熟(maturity<0.5)仍按 OPENING/MIDGAME 发育
+    var phase = (critHp || crowd>=8) ? 'SURVIVAL'
+              : (isEndgameRaw && maturity>=0.5) ? 'ENDGAME'        // ← 必须"成熟"才进收官
+              : (myLen<8 || (myHp>60 && density>=3)) ? 'OPENING'   // ← 去掉 !endgame：1v1 开局也能进发育
+              : 'MIDGAME';
+    // endgameGain：围棋大脑总开关，改为"是否1v1 × 成熟度"连续渐开(不再硬跳1.0)
+    //   开局1v1 maturity≈0 → 几乎不开，先发育；长大后平滑升到1全功率围杀。
+    var endgameGain = isEndgameRaw ? maturity : (phase==='MIDGAME' && !multiSnake ? 0.15*maturity : 0.0);
+    // gFood：发育期猛抢；1v1 收官随 maturity 在 1.2(早期仍抢)↔0.7(成熟收官) 间平滑过渡，不再一进1v1就打7折
+    var gFood;
+    if(phase==='SURVIVAL') gFood = critHp?1.6:0.8;
+    else if(phase==='OPENING') gFood = 1.35;
+    else if(isEndgameRaw) gFood = 1.2 - maturity*0.5;   // maturity0→1.2(发育) ... 1→0.7(收官)
+    else gFood = 1.0;
     var gCenter = phase==='OPENING'?1.1  : phase==='ENDGAME'?0.5 : phase==='SURVIVAL'?0.3 : 1.0;
     var gSafe   = phase==='SURVIVAL'?1.6 : 1.0;
 
