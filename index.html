@@ -66,6 +66,7 @@
   }
   .field input[type=color]{width:40px;height:28px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;padding:2px;}
   .field input[type=file]{font-size:11px;color:var(--muted);width:100%;}
+  .field select{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:6px;font-size:12px;cursor:pointer;}
   textarea{
     width:100%;min-height:120px;background:var(--panel2);border:1px solid var(--border);
     color:var(--text);padding:8px;border-radius:6px;font-size:11px;font-family:ui-monospace,Menlo,Consolas,monospace;resize:vertical;
@@ -138,11 +139,15 @@
 <body>
   <div class="topbar">
     <span class="logo">🐍 AI 贪吃蛇 · 打擂台</span>
-    <span class="sub">19×19 · 4蛇混战 · 积分制 · <span id="stat-line">0/0/0/0</span></span>
+    <span class="sub">19×19 · 4蛇混战 · 积分制(25/14/4/0) · <span id="stat-line">0/0/0/0</span></span>
     <span class="spacer"></span>
     <button id="btn-rules">📖 游戏基础规则</button>
+    <button id="btn-guide" style="background:var(--accent);color:#fff;border-color:var(--accent);">📜 策略宝典</button>
     <button id="btn-spec">📋 上传 JS 规范</button>
+    <button id="btn-auto-train" style="background:var(--accent2);color:#fff;border-color:var(--accent2);">🤖 自动训练</button>
     <button id="btn-analysis">📊 数据分析</button>
+    <button id="btn-robust">🛡️ 鲁棒性测试</button>
+    <button id="btn-archive">📦 归档库<span id="archive-count" style="color:var(--accent2);"></span></button>
     <button id="btn-lesson">📚 经验库</button>
     <button id="btn-llm-cfg">⚙️ 配置大模型</button>
     <button id="btn-clear-rank">🗑️ 清空积分榜</button>
@@ -302,6 +307,14 @@
       <div id="rules-content"></div>
     </div>
   </div>
+  <!-- 策略宝典 Modal -->
+  <div class="modal-mask" id="modal-guide">
+    <div class="modal" style="max-width:760px;">
+      <span class="close" data-close>×</span>
+      <h2>📜 策略宝典 · 最优贪吃蛇 AI 策略清单</h2>
+      <div id="guide-content" style="max-height:68vh;overflow:auto;"></div>
+    </div>
+  </div>
   <!-- Spec Modal -->
   <div class="modal-mask" id="modal-spec">
     <div class="modal">
@@ -360,17 +373,235 @@
         不配置也能用——走「📋 复制提示词」手动模式即可。<br>
         <b style="color:var(--yellow)">注意：</b>Key 仅存在本浏览器 localStorage，请勿在公共设备使用。
       </p>
+      <div class="field"><label style="width:64px;">服务商</label>
+        <select id="cfg-preset" style="flex:1;">
+          <option value="">— 选择快捷预设（自动填地址和模型）—</option>
+          <option value="deepseek">DeepSeek · deepseek-chat（性价比，推荐）</option>
+          <option value="deepseek-r1">DeepSeek-R1 · deepseek-reasoner（更会推理）</option>
+          <option value="qwen">通义千问 · qwen-plus（国内直连）</option>
+          <option value="qwen-max">通义千问 · qwen-max（更强）</option>
+          <option value="glm">智谱 GLM · glm-4-plus（国内直连）</option>
+          <option value="kimi">Kimi · moonshot-v1-8k（国内直连）</option>
+          <option value="openai">OpenAI · gpt-4o-mini（需代理）</option>
+          <option value="openai-4o">OpenAI · gpt-4o（需代理，更强）</option>
+          <option value="ollama">本地 Ollama · qwen2.5-coder（免费离线）</option>
+          <option value="custom">自定义（手动填写）</option>
+        </select></div>
       <div class="field"><label style="width:64px;">接口地址</label>
         <input type="text" id="cfg-baseurl" placeholder="https://api.deepseek.com/v1"></div>
       <div class="field"><label style="width:64px;">模型</label>
         <input type="text" id="cfg-model" placeholder="deepseek-chat"></div>
       <div class="field"><label style="width:64px;">API Key</label>
-        <input type="text" id="cfg-apikey" placeholder="sk-..."></div>
-      <p class="muted" style="font-size:11px;margin:6px 0 10px;">
-        常用：DeepSeek → <code>https://api.deepseek.com/v1</code> + <code>deepseek-chat</code>；
-        兼容任何 OpenAI 格式接口（通义/Kimi/本地 Ollama 等）。部分接口浏览器直连会被 CORS 拦截，公开平台建议用后端代理地址。
+        <input type="text" id="cfg-apikey" placeholder="sk-...（去对应平台官网申请）"></div>
+      <p class="muted" id="cfg-preset-hint" style="font-size:11px;margin:6px 0 10px;line-height:1.6;">
+        选一个服务商即可自动填好「接口地址」和「模型」，你只需补上自己的 API Key。三个框选完仍可手动修改。<br>
+        兼容任何 OpenAI 格式接口。部分接口浏览器直连会被 CORS 拦截，公开平台建议用后端代理地址。本地 Ollama 需先 <code>ollama serve</code> 并开启跨域。
       </p>
       <button class="btn-primary" id="cfg-save">💾 保存配置</button>
+    </div>
+  </div>
+  <!-- Auto-Train Modal -->
+  <div class="modal-mask" id="modal-auto">
+    <div class="modal" style="max-width:640px;">
+      <span class="close" data-close>×</span>
+      <h2>🤖 全自动训练飞轮</h2>
+      <!-- 参数配置视图 -->
+      <div id="auto-cfg-view">
+        <p class="muted" style="line-height:1.6;margin-bottom:12px;">
+          <b>三层嵌套飞轮</b>：<br>
+          • <b>大循环</b>：每轮结束由大模型<b>创造1条新蛇 + 杂交1条新蛇</b>加入，固定规模加N淘N（留种保护最强）。<br>
+          • <b>小循环</b>：同一批蛇反复打磨 K 次（跑满 K 或<b>收敛</b>提前停），每 L 次提炼一次元规律。<br>
+          • <b>批量赛</b>：每次小循环 = 跑一次批量赛 → 大模型提升<b>最差 N 条</b>（带回滚保护）。<br>
+          配了大模型 API 则全自动；未配则每步暂停弹窗，复制提示词手动回填后继续。<br>
+          <b style="color:var(--green);">💾 进化后的蛇、新生成的蛇都会自动存到本地，刷新/重开页面不丢失。</b>
+        </p>
+        <div style="font-size:12px;font-weight:600;color:var(--accent2);margin:4px 0 6px;">参赛蛇（勾选参加训练的蛇，至少2条）</div>
+        <div style="display:flex;gap:8px;margin-bottom:4px;">
+          <button class="btn-sm" id="at-sel-all" style="font-size:11px;padding:2px 8px;">全选</button>
+          <button class="btn-sm" id="at-sel-none" style="font-size:11px;padding:2px 8px;">清空</button>
+          <button class="btn-sm" id="at-sel-sync" style="font-size:11px;padding:2px 8px;">同步右侧勾选</button>
+          <span class="muted" id="at-sel-count" style="font-size:11px;margin-left:auto;align-self:center;"></span>
+        </div>
+        <div id="at-roster-list" style="max-height:120px;overflow:auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:4px 14px;"></div>
+
+        <div style="font-size:12px;font-weight:600;color:var(--accent2);margin:4px 0 6px;">外层 · 大循环</div>
+        <div class="field"><label style="width:160px;">大循环轮数</label>
+          <input type="number" id="at-big" class="small-input" style="width:70px;" value="3" min="1" max="50">
+          <span class="muted" style="font-size:11px;margin-left:6px;">每轮末加新蛇并换代</span></div>
+
+        <div style="font-size:12px;font-weight:600;color:var(--accent2);margin:10px 0 6px;">中层 · 小循环（同批打磨）</div>
+        <div class="field"><label style="width:160px;">每个大循环含小循环上限 K</label>
+          <input type="number" id="at-micro" class="small-input" style="width:70px;" value="4" min="1" max="50"></div>
+        <div class="field"><label style="width:160px;">每 L 次小循环总结元规律</label>
+          <input type="number" id="at-meta" class="small-input" style="width:70px;" value="2" min="0" max="50">
+          <span class="muted" style="font-size:11px;margin-left:6px;">0=不总结，1=每次</span></div>
+        <div class="field" style="flex-wrap:wrap;gap:14px;">
+          <label style="width:auto;"><input type="checkbox" id="at-converge" checked> 收敛即停（最差蛇连续2次无提升则结束小循环）</label>
+        </div>
+
+        <div style="font-size:12px;font-weight:600;color:var(--accent2);margin:10px 0 6px;">内层 · 单次批量赛</div>
+        <div class="field"><label style="width:160px;">每次批量赛场数</label>
+          <input type="number" id="at-matches" class="small-input" style="width:70px;" value="30" min="5" max="500"></div>
+        <div class="field"><label style="width:160px;">每次提升最差 N 条</label>
+          <input type="number" id="at-improve" class="small-input" style="width:70px;" value="2" min="1" max="10"></div>
+        <div class="field"><label style="width:160px;">回滚回测场数</label>
+          <input type="number" id="at-rollback-n" class="small-input" style="width:70px;" value="10" min="2" max="50"></div>
+        <div class="field" style="flex-wrap:wrap;gap:14px;">
+          <label style="width:auto;"><input type="checkbox" id="at-rollback" checked> 进化回滚保护(只升不降)</label>
+        </div>
+
+        <div style="font-size:12px;font-weight:600;color:var(--accent2);margin:10px 0 6px;">🛡️ 鲁棒性训练（应对食物比例变化）</div>
+        <div class="field" style="flex-wrap:wrap;gap:14px;">
+          <label style="width:auto;"><input type="checkbox" id="at-randfood"> 随机食物比例(每场抽极端比例·域随机化)</label>
+        </div>
+        <div class="field" style="flex-wrap:wrap;gap:14px;">
+          <label style="width:auto;"><input type="checkbox" id="at-robusteval"> 多比例回测(只有"最坏比例也不退化"才算进化成功)</label>
+        </div>
+        <p class="muted" style="font-size:11px;margin:2px 0 12px;line-height:1.6;">
+          勾选后训练会逼蛇适应任意食物比例：批量赛随机切换比例 + 回测取最差情况胜率。可练出对比例变化更鲁棒的蛇，但更慢（回测要跑多个比例）。
+        </p>
+
+        <div style="font-size:12px;font-weight:600;color:var(--accent2);margin:10px 0 6px;">蛇群保留策略</div>
+        <div class="field"><label style="width:160px;">保留方式</label>
+          <select id="at-keep" class="small-input" style="width:auto;min-width:240px;">
+            <option value="elite-archive" selected>精英种群 + 淘汰者存档（推荐）</option>
+            <option value="elite">精英种群：每代留强汰弱(淘汰者删除)</option>
+            <option value="topk">只留最终最强的 K 条</option>
+            <option value="all">全部保留(含所有中间新蛇)</option>
+          </select>
+        </div>
+        <div class="field" id="at-elite-row"><label style="width:160px;">精英种群规模</label>
+          <input type="number" id="at-elite-size" class="small-input" style="width:70px;" value="4" min="2" max="20">
+          <span class="muted" style="font-size:11px;margin-left:6px;">比赛擂台维持的蛇数</span></div>
+        <div class="field" id="at-topk-row" style="display:none;"><label style="width:160px;">保留 Top-K 条</label>
+          <input type="number" id="at-topk" class="small-input" style="width:70px;" value="3" min="1" max="50"></div>
+        <p class="muted" style="font-size:11px;margin:2px 0 12px;line-height:1.6;">
+          • <b style="color:var(--green);">精英种群+存档</b>：比赛擂台只保持固定规模（如4条）的精英持续进化；每代被淘汰的弱蛇<b>移入「📦 归档库」</b>而非删除——既规模可控、批量赛快，又能随时翻看/调回旧蛇。<br>
+          • <b>精英种群</b>：同上，但被淘汰的蛇直接删除，不保留。<br>
+          • <b>只留 Top-K</b>：训练过程不淘汰，<b>结束时</b>只保留胜率最高的 K 条，其余清掉。<br>
+          • <b>全部保留</b>：所有蛇都留在擂台（种群会变大、批量赛变慢、列表很长）。
+        </p>
+        <p class="muted" style="font-size:11px;margin:8px 0 12px;">
+          参赛范围以上方「参赛蛇」勾选为准（至少2条）。总批量赛次数 ≈ 大循环轮数 × 小循环 K。
+        </p>
+        <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;line-height:1.6;" class="muted">
+          <b style="color:var(--accent2);">没有大模型？</b> 用「⚡ 极速测试」预设：大循环1 / 小循环1 / 不总结元规律 / 提升最差1条。<br>
+          运行中遇到弹窗，直接点弹窗里「<b>↷ 跳过本步</b>」即可——这样全程<b>只跑批量赛、不依赖 AI</b>，几秒就能跑完看到完整流程与胜率图。
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-sm" id="at-quick" style="background:var(--accent2);color:#fff;border-color:var(--accent2);">⚡ 极速测试预设</button>
+          <button class="btn-primary" id="at-start" style="flex:1;margin:0;">🚀 开始自动训练</button>
+        </div>
+      </div>
+      <!-- 运行视图 -->
+      <div id="auto-run-view" style="display:none;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <b style="font-size:13px;" id="auto-status">准备中…</b>
+          <div id="auto-running-ctrl" style="margin-left:auto;display:flex;gap:6px;">
+            <button class="btn-sm" id="at-pause">⏸ 暂停</button>
+            <button class="btn-sm" id="at-resume" style="display:none;">▶ 继续</button>
+            <button class="btn-sm" id="at-abort" style="color:var(--red);">⏹ 中止</button>
+          </div>
+          <div id="auto-done-ctrl" style="margin-left:auto;display:none;gap:6px;">
+            <span class="link" id="at-export">📥 导出训练历史</span>
+            <span class="link" id="at-back">⚙️ 重新配置</span>
+          </div>
+        </div>
+        <canvas id="auto-chart" width="600" height="180" style="width:100%;background:#11151c;border-radius:8px;border:1px solid var(--border);margin-bottom:8px;"></canvas>
+        <!-- 进化记录汇总 -->
+        <div style="display:flex;align-items:center;gap:8px;margin:4px 0 6px;">
+          <b style="font-size:12px;">🧬 进化记录</b>
+          <span class="muted" id="evolog-stat" style="font-size:11px;"></span>
+        </div>
+        <div id="auto-evolog" style="max-height:150px;overflow:auto;font-size:12px;background:var(--panel2);border-radius:8px;padding:6px 8px;margin-bottom:8px;">
+          <span class="muted" style="font-size:11px;">本次训练里被进化的蛇会列在这里（进化前后胜率、生效/回滚）。</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">运行日志</div>
+        <div id="auto-log" style="height:160px;overflow:auto;font-size:12px;line-height:1.7;font-family:ui-monospace,monospace;background:var(--panel2);border-radius:8px;padding:10px;"></div>
+      </div>
+    </div>
+  </div>
+  <!-- 归档库 Modal -->
+  <div class="modal-mask" id="modal-archive">
+    <div class="modal">
+      <span class="close" data-close>×</span>
+      <h2>📦 归档库</h2>
+      <p class="muted" style="line-height:1.6;margin-bottom:8px;">
+        自动训练时「精英种群+存档」策略下，每代被淘汰的蛇会移到这里保存（不参赛、不占用比赛规模）。可随时<b>调回擂台</b>重新参赛，或查看代码做对比。
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <span class="muted" id="archive-stat" style="font-size:12px;align-self:center;"></span>
+        <button class="btn-sm" id="archive-clear" style="margin-left:auto;color:var(--red);">🗑️ 清空归档库</button>
+      </div>
+      <div id="archive-list" style="max-height:50vh;overflow:auto;"></div>
+    </div>
+  </div>
+  <!-- 鲁棒性测试 Modal -->
+  <div class="modal-mask" id="modal-robust">
+    <div class="modal" style="max-width:680px;">
+      <span class="close" data-close>×</span>
+      <h2>🛡️ 鲁棒性测试</h2>
+      <p class="muted" style="line-height:1.6;margin-bottom:10px;">
+        用 6 种食物比例（默认/毒蜘蛛海/蟠桃盛宴/全是包子/高危少食/均衡）各跑一批，给每条蛇出一张「比例×胜率」表。
+        <b>最差情况胜率越高、波动越小 = 越鲁棒</b>（应对食物比例变化能力越强）。
+      </p>
+      <div class="field">
+        <label style="width:auto;">测试模式</label>
+        <select id="robust-mode" class="small-input" style="width:auto;min-width:240px;">
+          <option value="fixed" selected>对照陪练：被测蛇 vs 3 条固定强对手（推荐·结果可比）</option>
+          <option value="selected">同场混战：勾选的蛇互相对打</option>
+        </select>
+      </div>
+      <div class="field" id="robust-foes-row">
+        <label style="width:auto;">固定陪练</label>
+        <select id="robust-foe1" class="small-input" style="width:auto;min-width:120px;"></select>
+        <select id="robust-foe2" class="small-input" style="width:auto;min-width:120px;margin-left:6px;"></select>
+        <select id="robust-foe3" class="small-input" style="width:auto;min-width:120px;margin-left:6px;"></select>
+      </div>
+      <p class="muted" style="font-size:11px;margin:2px 0 8px;line-height:1.6;">
+        • <b>对照陪练</b>模式：每条被测蛇分别与这 3 条固定对手凑成 4 蛇混战，唯一变量是食物比例，结果最科学可比。被测蛇 = 右侧勾选（未勾用全部）。<br>
+        • <b>同场混战</b>模式：直接用右侧勾选的蛇互相对打（旧逻辑）。
+      </p>
+      <div class="field" id="robust-cfg">
+        <label style="width:auto;">每比例场数</label>
+        <input type="number" id="robust-n" class="small-input" style="width:70px;" value="20" min="5" max="200">
+        <label style="width:auto;margin-left:10px;">每场回合上限</label>
+        <input type="number" id="robust-maxturns" class="small-input" style="width:70px;" value="150" min="60" max="600">
+        <button class="btn-primary" id="robust-start" style="width:auto;margin:0 0 0 12px;">🚀 开始测试</button>
+        <button class="btn-sm" id="robust-stop" style="width:auto;margin:0 0 0 8px;display:none;color:var(--red);">⏹ 停止</button>
+        <span class="muted" id="robust-status" style="font-size:12px;margin-left:10px;"></span>
+      </div>
+      <p class="muted" style="font-size:11px;margin:2px 0 8px;">⚡ 回合上限越小越快（200 足够分胜负）；带 minimax 的强蛇(棋圣/天选)若选很多条+大场数会偏慢，建议先用默认值试跑。</p>
+      <div id="robust-result" style="max-height:50vh;overflow:auto;"></div>
+    </div>
+  </div>
+  <!-- 查看选手代码 Modal -->
+  <div class="modal-mask" id="modal-code">
+    <div class="modal">
+      <span class="close" data-close>×</span>
+      <h2 id="code-title">{ } 选手代码</h2>
+      <p class="muted" id="code-meta" style="font-size:12px;margin-bottom:8px;"></p>
+      <pre id="code-body" style="max-height:55vh;overflow:auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;line-height:1.5;white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;"></pre>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-sm" id="code-copy" style="background:var(--accent2);color:#fff;border-color:var(--accent2);">📋 复制代码</button>
+      </div>
+    </div>
+  </div>
+  <!-- Manual fallback Modal (自动训练无API时手动回填) -->
+  <div class="modal-mask" id="modal-manual">
+    <div class="modal">
+      <span class="close" data-close>×</span>
+      <h2 id="manual-title">✋ 手动调用大模型</h2>
+      <p class="muted" style="line-height:1.6;margin-bottom:8px;">未配置 API，训练已暂停。复制下面提示词给任意 AI（含本对话），把返回内容粘贴回下方，点「提交继续」训练即接着跑。</p>
+      <button class="btn-sm" id="manual-copy" style="background:var(--accent2);color:#fff;border-color:var(--accent2);margin-bottom:6px;">📋 复制提示词</button>
+      <textarea id="manual-prompt" style="min-height:90px;"></textarea>
+      <h3 style="margin-top:10px;">把 AI 返回的内容贴这里：</h3>
+      <textarea id="manual-result" placeholder="// 粘贴 AI 返回的完整内容"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-primary" id="manual-submit" style="flex:1;margin:0;">✅ 提交并继续</button>
+        <button class="btn-sm" id="manual-skip">↷ 跳过本步</button>
+      </div>
+      <div id="manual-msg" class="muted" style="margin-top:8px;font-size:11px;"></div>
     </div>
   </div>
 
@@ -386,7 +617,7 @@ const CELL = 32;                 // 像素/格
 const INIT_HP = 100;
 const INIT_LEN = 3;
 const DEFAULT_MAX_TURNS = 1000;
-const FOOD_COUNT = 5;            // 地图维持的食物数
+const FOOD_COUNT = 8;            // 地图维持的食物数（5→8：默认比例约30%是毒蜘蛛，实际可吃从~3.5提到~5.6，缓解4蛇开局抢光后饿死）
 
 const DIRS = {
   up:    {x:0, y:-1},
@@ -727,10 +958,15 @@ class SnakeGame {
   }
 
   // 单场结算：返回排名 [{id,name,score,...}]
+  // 排名规则（与赛事标准一致）：
+  //  1) 存活蛇排最前；剩 1 条存活即第 1 名。
+  //  2) 死亡者按死亡回合从晚到早(越晚活得越久→名次越高)。
+  //  3) 同一回合死亡 → 比长度，长者名次高。
+  //  4) 同回合 + 同长度 → 并列同名次（名次跳号）。
+  //  5) 同时相撞死亡视为同回合死亡，按上面规则；同回合同长度即并列。
   result(){
-    // 评分：存活到最后名次 + 食物 + 长度 + 存活回合
     const arr = this.snakes.map(s=>{
-      const placeKilledTurn = s.alive ? this.turn+1 : s.deathTurn; // 活着的排最后死
+      const placeKilledTurn = s.alive ? this.turn+1 : s.deathTurn; // 活着的算"最后才死"
       return {
         id:s.id, name:s.name, color:s.color,
         alive:s.alive, hp:Math.max(0,s.hp),
@@ -741,15 +977,20 @@ class SnakeGame {
         _placeTurn: placeKilledTurn,
       };
     });
-    // 排名：先按是否存活，再按死亡回合(越晚越好)，再按长度，再按食物
+    // 排序：死亡回合越晚越前；同回合长度越长越前
     arr.sort((a,b)=>{
-      if(a.alive!==b.alive) return a.alive? -1:1;
       if(b._placeTurn!==a._placeTurn) return b._placeTurn-a._placeTurn;
-      if(b.length!==a.length) return b.length-a.length;
-      if(b.foodEaten!==a.foodEaten) return b.foodEaten-a.foodEaten;
-      return b.survivedTurns-a.survivedTurns;
+      return b.length-a.length;
     });
-    arr.forEach((r,i)=> r.rank=i+1);
+    // 名次：相邻两条"_placeTurn 相同且 length 相同"→ 并列同名次；否则名次 = 当前下标+1（跳号）
+    let curRank=1;
+    arr.forEach((r,i)=>{
+      if(i===0){ r.rank=1; curRank=1; return; }
+      const prev=arr[i-1];
+      const tie = (r._placeTurn===prev._placeTurn && r.length===prev.length);
+      r.rank = tie ? curRank : (i+1);   // 并列沿用上一名次；否则跳到下标位
+      curRank = r.rank;
+    });
     return arr;
   }
 }
@@ -1166,6 +1407,842 @@ const BUILTIN_AIS = {
     cand.sort(function(a,b){return b.score-a.score;});
     return cand[0].dir;
   },
+
+  // 🧬 新范式G1：自动训练飞轮产出的冠军蛇（flood-fill 安全空间 + 价值抢食 + 头碰头规避 + 低血急救
+  //               + 占领中心控场 + 镜像逼抢）。2026-06-15 经"单挑 Siege"针对性进化升级：
+  //               单挑 Siege 48.5%→54.0%，4 蛇混战 22%→27%(居首)，新增控场/逼抢两项。
+  genesisG1: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=state.self.head;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},OPP={up:'down',down:'up',left:'right',right:'left'};
+    var alive=state.snakes.filter(function(s){return s.alive&&!s.isSelf;});
+    var blk=new Set(); state.snakes.forEach(function(s){ if(s.body)s.body.forEach(function(c){blk.add(c.x+','+c.y);}); });
+    var enemy=new Set(); state.snakes.forEach(function(s){ if(s.isSelf||!s.alive)return; if(s.length>=self.length)for(var d in D)enemy.add((s.head.x+D[d].x)+','+(s.head.y+D[d].y)); });
+    var foods=state.foods||[]; var poison=new Set(foods.filter(function(f){return f.type==='spider';}).map(function(f){return f.x+','+f.y;}));
+    function ib(x,y){return x>=0&&y>=0&&x<W&&y<H;} function free(x,y){return ib(x,y)&&!blk.has(x+','+y);}
+    function flood(x,y){ if(!free(x,y))return 0; var seen=new Set([x+','+y]),q=[[x,y]],n=0;
+      while(q.length&&n<280){ var c=q.shift(),cx=c[0],cy=c[1]; n++; for(var d in D){ var nx=cx+D[d].x,ny=cy+D[d].y,k=nx+','+ny; if(free(nx,ny)&&!seen.has(k)){seen.add(k);q.push([nx,ny]);} } } return n; }
+    var foe=alive.length===1?alive[0]:null;
+    var cx0=(W-1)/2, cy0=(H-1)/2;
+    var tgt=null,bv=-1e9; foods.forEach(function(f){ if(f.type==='spider')return; var dist=Math.abs(f.x-head.x)+Math.abs(f.y-head.y); var val=(f.type==='peach'?34:13)-dist; if(val>bv){bv=val;tgt=f;} });
+    var lowHp=self.hp<35; var cand=[];
+    for(var d in D){ if(d===OPP[self.dir])continue; var nx=head.x+D[d].x,ny=head.y+D[d].y,k=nx+','+ny;
+      if(!free(nx,ny))continue; if(poison.has(k))continue;
+      var sp=flood(nx,ny); if(sp<self.length&&!lowHp)continue;
+      var sc=sp*1.5; if(enemy.has(k))sc-=70;
+      if(tgt)sc+=(lowHp?60:30)-(Math.abs(tgt.x-nx)+Math.abs(tgt.y-ny))*1.5;
+      var cdist=Math.abs(nx-cx0)+Math.abs(ny-cy0); sc+=(W-cdist)*0.6;                       // 占领中心控场
+      if(foe&&self.length>foe.length){ var toFoe=Math.abs(nx-foe.head.x)+Math.abs(ny-foe.head.y); sc+=(W-toFoe)*0.8; }  // 更长时镜像逼抢
+      cand.push({dir:d,score:sc}); }
+    if(!cand.length){ for(var d2 in D){ if(d2===OPP[self.dir])continue; var ex=head.x+D[d2].x,ey=head.y+D[d2].y; if(ib(ex,ey))return d2; } return self.dir; }
+    cand.sort(function(a,b){return b.score-a.score;});
+    return cand[0].dir;
+  },
+
+  // 🌀 双信号G2：双信号自适应——信号1=食物密度(决定该不该抢)，信号2=局部拥挤度(决定抢时多避碰)。
+  //   2026-06-16 鲁棒性进化产物。高均值型选手(6比例均胜率约35% > G1 的29%)，且修好了"全是包子/蟠桃盛宴"
+  //   两个 G1 的短板；代价是"高危少食"档偏弱(约26% < G1 的41%)。与 G1 互补，丰富擂台风格多样性。
+  genesisDual2: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=state.self.head;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},OPP={up:'down',down:'up',left:'right',right:'left'};
+    var alive=state.snakes.filter(function(s){return s.alive&&!s.isSelf;});
+    var blk=new Set(); state.snakes.forEach(function(s){ if(s.body)s.body.forEach(function(c){blk.add(c.x+','+c.y);}); });
+    var h2h=new Set();
+    state.snakes.forEach(function(s){ if(s.isSelf||!s.alive)return; if(s.length>=self.length){ for(var d in D)h2h.add((s.head.x+D[d].x)+','+(s.head.y+D[d].y)); } });
+    var foods=state.foods||[];
+    var eat=foods.filter(function(f){return f.type!=='spider';});
+    var poison=new Set(foods.filter(function(f){return f.type==='spider';}).map(function(f){return f.x+','+f.y;}));
+    var density=eat.length;                                  // 信号1：食物密度
+    var R=3, crowd=0;                                        // 信号2：局部拥挤度
+    state.snakes.forEach(function(s){ if(s.isSelf||!s.alive||!s.body)return;
+      s.body.forEach(function(c){ if(Math.abs(c.x-head.x)+Math.abs(c.y-head.y)<=R) crowd++; }); });
+    state.snakes.forEach(function(s){ if(s.isSelf||!s.alive)return; if(Math.abs(s.head.x-head.x)+Math.abs(s.head.y-head.y)<=R+1) crowd+=2; });
+    var hp=self.hp, lowHp=hp<35, highHp=hp>70;
+    var aggr = 0.75 + density*0.3 + (lowHp?0.8:0) - (highHp?0.3:0);
+    if(aggr<0.3)aggr=0.3; if(aggr>2.4)aggr=2.4;
+    var caution = 1 + crowd*0.08; if(caution>2)caution=2;
+    function ib(x,y){return x>=0&&y>=0&&x<W&&y<H;} function free(x,y){return ib(x,y)&&!blk.has(x+','+y);}
+    function flood(x,y){ if(!free(x,y))return 0; var seen=new Set([x+','+y]),q=[[x,y]],n=0;
+      while(q.length&&n<280){ var c=q.shift(),cx=c[0],cy=c[1]; n++; for(var d in D){ var nx=cx+D[d].x,ny=cy+D[d].y,k=nx+','+ny; if(free(nx,ny)&&!seen.has(k)){seen.add(k);q.push([nx,ny]);} } } return n; }
+    function exits(x,y){ var c=0; for(var d in D){ if(free(x+D[d].x,y+D[d].y))c++; } return c; }
+    var foe=alive.length===1?alive[0]:null;
+    var cx0=(W-1)/2, cy0=(H-1)/2;
+    var tgt=null,bv=-1e9,tgtSafe=false;
+    eat.forEach(function(f){ var myd=Math.abs(f.x-head.x)+Math.abs(f.y-head.y);
+      var iAmClosest=true; state.snakes.forEach(function(s){ if(s.isSelf||!s.alive)return; if(Math.abs(f.x-s.head.x)+Math.abs(f.y-s.head.y)<myd)iAmClosest=false; });
+      var val=(f.type==='peach'?34:13)-myd+(iAmClosest?10:0);
+      if(val>bv){bv=val;tgt=f;tgtSafe=iAmClosest;} });
+    var cand=[];
+    for(var d in D){ if(d===OPP[self.dir])continue; var nx=head.x+D[d].x,ny=head.y+D[d].y,k=nx+','+ny;
+      if(!free(nx,ny))continue; if(poison.has(k)&&!(lowHp&&aggr>1.6))continue;
+      var sp=flood(nx,ny); if(sp<self.length&&!lowHp)continue;
+      var sc=sp*(1.0+caution*0.4);
+      if(h2h.has(k))sc-=90*caution;
+      var ex=exits(nx,ny); if(ex<=1)sc-=120*caution;
+      var foodPull=(lowHp?70:30)*aggr/Math.pow(caution,0.5)*(tgtSafe?1.2:1);
+      if(tgt)sc+=foodPull-(Math.abs(tgt.x-nx)+Math.abs(tgt.y-ny))*1.4;
+      var cdist=Math.abs(nx-cx0)+Math.abs(ny-cy0); sc+=(W-cdist)*0.5;
+      if(foe&&self.length>foe.length){ var toFoe=Math.abs(nx-foe.head.x)+Math.abs(ny-foe.head.y); sc+=(W-toFoe)*0.7; }
+      cand.push({dir:d,score:sc}); }
+    if(!cand.length){ for(var d2 in D){ if(d2===OPP[self.dir])continue; var ax=head.x+D[d2].x,ay=head.y+D[d2].y; if(ib(ax,ay))return d2; } return self.dir; }
+    cand.sort(function(a,b){return b.score-a.score;}); return cand[0].dir;
+  },
+
+  // 👑 集大成Ω(Omega)：五合一最强基底，融合全部已知最优策略，专为"比赛迭代微调"设计。
+  //   ① 尾连通刚性校验(用户蛇)——数学根除自困，唯一硬红线
+  //   ② 状态机切换(FSM)——按局势在 觅食/避险/残局/急食 四态切换权重
+  //   ③ 残局空间博弈+封锁(Siege)——1v1 时压缩对手可达空间
+  //   ④ 中心控场 + 镜像逼抢(G1)
+  //   ⑤ 双信号自适应抢食(G2)——食物密度×局部拥挤度
+  //   2026-06-16 针对诊断(困死饿死68%/头碰头24%)迭代：提前急食阈值+BFS真实路径抢食(治饿死)、
+  //   空间不足按缺口梯度重罚(治困死)、头碰头双级预测(硬/软都躲，治头碰头)。实测混战胜率13.75%→25%。
+  //   所有可调参数集中在函数顶部 PM 对象，比赛中只需改这里。
+  genesisOmega: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp,myDir=self.dir,myBody=self.body;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    // ============ 可调参数（比赛微调入口）============
+    var PM={
+      R:3,             // 拥挤感知半径
+      safeW:1.2,       // 安全空间基础权重
+      crowdGain:0.07,  // 拥挤度→caution 斜率
+      crowdMax:1.9,    // caution 上限
+      aggrBase:1.0,    // 抢食基础系数(↑，提升进攻性)
+      dGain:0.30,      // 食物密度→aggr 斜率
+      suppress:0.4,    // 拥挤抑制抢食指数(越大越保守)
+      h2hPen:120,      // 头碰头硬惩罚(↑，治24%头碰头)
+      h2hSoftPen:35,   // 更短对手蛇头格的软惩罚(也躲，因对手可能转向)
+      foodBase:52,     // 抢食基础拉力(↑，整体更主动→治饿死)
+      hungerFood:140,  // 低血急食强拉力(治68%困死饿死)
+      centerW:0.5,     // 中心控场权重
+      siegeW:1.6,      // 残局空间博弈权重
+      blockW:5,        // 残局封锁压缩奖励
+      antiPredict:6    // 反预测同向惩罚
+    };
+    // ============ 地图 / 敌我 ============
+    var blocked={},selfSet={},tails={},enemies=[];
+    for(var j=0;j<myBody.length;j++){var p=myBody[j];blocked[K(p.x,p.y)]=true;selfSet[K(p.x,p.y)]=true;}
+    tails[K(myBody[myBody.length-1].x,myBody[myBody.length-1].y)]=true;
+    for(var i=0;i<state.snakes.length;i++){var s=state.snakes[i];if(!s.alive||s.id===self.id)continue;
+      for(var b=0;b<s.body.length;b++)blocked[K(s.body[b].x,s.body[b].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      enemies.push({x:s.head.x,y:s.head.y,len:s.length,dir:s.dir,body:s.body});}
+    var foe=enemies.length===1?enemies[0]:null, endgame=!!foe;
+    // 头碰头双级预测：对手>=我=硬危险(撞了我死)；对手<我=软危险(它可能也躲开但仍是风险位)；且排除对手不会走的反向格
+    var h2hHard={},h2hSoft={};
+    for(var ei=0;ei<enemies.length;ei++){var e=enemies[ei];
+      for(var d in D){ if(d===OPP[e.dir])continue;
+        var hk=K(e.x+D[d].x,e.y+D[d].y);
+        if(e.len>=myLen)h2hHard[hk]=true; else h2hSoft[hk]=true; } }
+    var foods=state.foods||[];
+    var eat=foods.filter(function(f){return f.type!=='spider';});
+    var poison={};foods.forEach(function(f){if(f.type==='spider')poison[K(f.x,f.y)]=true;});
+    // ============ 双信号(G2) ============
+    var density=eat.length, crowd=0;
+    for(var ci=0;ci<enemies.length;ci++){var ee=enemies[ci];for(var bb=0;bb<ee.body.length;bb++){var c=ee.body[bb];if(Math.abs(c.x-head.x)+Math.abs(c.y-head.y)<=PM.R)crowd++;}
+      if(Math.abs(ee.x-head.x)+Math.abs(ee.y-head.y)<=PM.R+1)crowd+=2;}
+    var lowHp=myHp<55,critHp=myHp<25,highHp=myHp>70;   // 提前进入低血/急食阈值(治饿死)
+    var aggr=PM.aggrBase+density*PM.dGain+(lowHp?0.8:0)-(highHp?0.3:0);
+    if(aggr<0.3)aggr=0.3;if(aggr>2.4)aggr=2.4;
+    var caution=1+crowd*PM.crowdGain;if(caution>PM.crowdMax)caution=PM.crowdMax;
+    // ============ 状态机(FSM)：决定本回合主导倾向 ============
+    // forage 觅食(血够/安全) / survive 避险(空间紧/拥挤高) / hunt 残局(1v1且不弱) / starve 急食(血危)
+    var fsm = critHp ? 'starve' : (endgame && myLen>=foe.len ? 'hunt' : (crowd>=6 ? 'survive' : 'forage'));
+    var fsmSafe = (fsm==='survive')?1.5:(fsm==='hunt')?0.9:1.0;     // 安全权重缩放
+    var fsmFood = (fsm==='starve')?1.8:(fsm==='survive')?0.7:1.0;   // 抢食缩放
+    // ============ 工具 ============
+    var inB=function(x,y){return x>=0&&y>=0&&x<W&&y<H;};
+    var passable=function(x,y,allowTail){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k])return allowTail&&tails[k];return true;};
+    var flood=function(sx,sy){if(!passable(sx,sy,true))return 0;var seen={};var stk=[[sx,sy]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y;if(!seen[K(nx,ny)]&&passable(nx,ny,true))stk.push([nx,ny]);}}return n;};
+    var openNb=function(x,y){var n=0;for(var d in D)if(passable(x+D[d].x,y+D[d].y,true))n++;return n;};
+    // 尾连通刚性校验(用户蛇核心，唯一硬红线)
+    var tailConn=function(nx,ny,eatF){var nb,nt;if(eatF){nb=[{x:nx,y:ny}].concat(myBody);nt=myBody[myBody.length-1];}else{nb=[{x:nx,y:ny}].concat(myBody.slice(0,-1));nt=myBody[myBody.length-2];}
+      if(!nt)return true;var ntK=K(nt.x,nt.y);var sb={};for(var i=0;i<nb.length-1;i++)sb[K(nb[i].x,nb[i].y)]=true;
+      var seen={};var stk=[[nx,ny]];while(stk.length){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;if(ck===ntK)return true;
+        for(var d in D){var ax=cx+D[d].x,ay=cy+D[d].y,ak=K(ax,ay);if(!inB(ax,ay)||seen[ak])continue;if(blocked[ak]&&!selfSet[ak])continue;if(sb[ak])continue;stk.push([ax,ay]);}}return false;};
+    // 残局：对手在我落子后的可达空间(Siege 博弈)
+    var enemyReach=function(extra){if(!foe)return 0;var seen={};var stk=[[foe.x,foe.y]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(seen[k])continue;if(!inB(nx,ny))continue;if(blocked[k]&&!(tails[k]))continue;if(extra&&extra[k])continue;stk.push([nx,ny]);}}return n;};
+    var foeBase=endgame?enemyReach(null):0;
+    // ============ 目标食物 ============
+    var tgt=null,bv=-1e9,tgtSafe=false;
+    eat.forEach(function(f){var myd=Math.abs(f.x-head.x)+Math.abs(f.y-head.y);var iClose=true;
+      for(var k=0;k<enemies.length;k++){if(Math.abs(f.x-enemies[k].x)+Math.abs(f.y-enemies[k].y)<myd)iClose=false;}
+      var val=(f.type==='peach'?34:13)-myd+(iClose?10:0);if(val>bv){bv=val;tgt=f;tgtSafe=iClose;}});
+    // BFS 到最近可达食物的第一步方向(治抢食少/饿死：用真实可达路径而非曼哈顿直线)
+    var bfsFood=function(){
+      if(!eat.length)return null;
+      var goal={};eat.forEach(function(f){goal[K(f.x,f.y)]=f.type;});
+      var seen={};seen[K(head.x,head.y)]=true;
+      var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;
+      while(qi<q.length){var nd=q[qi++];
+        for(var dd in D){var nx=nd.x+D[dd].x,ny=nd.y+D[dd].y,nk=K(nx,ny);
+          if(seen[nk]||!passable(nx,ny,true))continue;
+          if(nd.dist===0&&(h2hHard[nk]||poison[nk]))continue;
+          seen[nk]=true;var fd=nd.first||dd;
+          if(goal[nk]&&!poison[nk])return {dir:fd,dist:nd.dist+1,type:goal[nk]};
+          q.push({x:nx,y:ny,first:fd,dist:nd.dist+1});}}
+      return null;
+    };
+    var foodPath=bfsFood();
+    var cx0=(W-1)/2,cy0=(H-1)/2;
+    // ============ 候选打分 ============
+    var cand=[];
+    for(var d in D){if(d===OPP[myDir])continue;var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      if(poison[nk]&&!(critHp&&aggr>1.8))continue;   // 几乎绝不踩毒，仅濒死才赌(治误吃毒)
+      var sc=0;
+      // ① 尾连通红线
+      if(!tailConn(nx,ny,false)||!tailConn(nx,ny,true))sc-=100000;
+      // ② 安全空间(治困死68%：空间不足身长按缺口梯度重罚，而非软轻罚)
+      var sp=flood(nx,ny);
+      sc+=sp*(PM.safeW+caution*0.4)*fsmSafe;
+      if(sp<myLen)sc-=(myLen-sp)*180;            // 逃生空间小于身长→按缺口梯度重罚(防困死)
+      if(sp<myLen*0.5)sc-=2500;                  // 严重不足→近乎否决
+      if(openNb(nx,ny)<=1)sc-=160*caution;       // 单行道入口高危
+      // ③ 头碰头预测(治24%)：硬危险重罚，软危险(更短对手)也躲
+      if(h2hHard[nk])sc-=PM.h2hPen*caution;
+      else if(h2hSoft[nk])sc-=PM.h2hSoftPen*caution;
+      // ⑤ 抢食：BFS 真实可达路径优先 + 低血急食强拉(治饿死)
+      if(foodPath&&foodPath.dir===d){
+        var fbase=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.6:PM.foodBase);
+        var typeBonus=foodPath.type==='peach'?1.4:1.0;
+        sc+=fbase*aggr/Math.pow(caution,PM.suppress)*fsmFood*typeBonus-foodPath.dist*1.2;
+      }
+      // 落点即食物直接奖励(蟠桃回满血/包子续命，低血加倍)
+      for(var fi=0;fi<eat.length;fi++){if(eat[fi].x===nx&&eat[fi].y===ny){sc+=(eat[fi].type==='peach'?70:30)*fsmFood*(lowHp?1.5:1);break;}}
+      // ④ 中心控场 + 镜像逼抢
+      sc+=(W-(Math.abs(nx-cx0)+Math.abs(ny-cy0)))*PM.centerW;
+      if(foe&&myLen>foe.len){sc+=(W-(Math.abs(nx-foe.x)+Math.abs(ny-foe.y)))*0.7;}
+      // ③ 残局空间博弈+封锁(Siege)：仅我落点足够安全时追求压缩对手
+      if(endgame&&sp>=myLen){var extra={};extra[nk]=true;var foeSp=enemyReach(extra);var squeeze=foeBase-foeSp;
+        if(myLen>foe.len){sc+=(sp-foeSp)*PM.siegeW;if(squeeze>0)sc+=squeeze*PM.blockW;if(foeSp>0&&foeSp<foe.len*1.1)sc+=450;}
+        else{sc+=(sp-foeSp)*0.5;}}
+      // 反预测
+      if(d===myDir)sc-=PM.antiPredict;
+      cand.push({dir:d,score:sc});
+    }
+    if(!cand.length){var bestDir=myDir,ms=-1;for(var dz in D){if(dz===OPP[myDir])continue;var sp2=flood(head.x+D[dz].x,head.y+D[dz].y);if(sp2>ms){ms=sp2;bestDir=dz;}}return bestDir;}
+    cand.sort(function(a,b){return b.score-a.score;});return cand[0].dir;
+  },
+
+
+  // 🏯 棋圣Ω·弈(GoSagePro)：在棋圣Ω 上加【四合一混战增强】，由阶段门控协调。
+  //   多蛇期(蛇数≥3)：①④ 多源势力图抢食(BFS算每个食物"我-最近对手到达差"，优先抢领先最多的) +
+  //     ② 苟到决赛圈(远离蛇群扎堆区，让对手内耗) + ③ 头碰头主动吃(明显更长+落点安全→主动撞短蛇清场)。
+  //   决赛圈(蛇数=2)：自动切换围棋大脑(双源势力图/分断/2层minimax)全力围杀。
+  //   2026-06-16。新参数在 PM.mc* 区。混战增强目标：把混战从中游提到中上(策略层天花板仍受"食物零和饿死"约束)。
+  //   2026-06-16 抢食强化(治"前期抢食不够易饿死")：①去掉多蛇期抢食0.8折(交gFood调节,发育期1.35更猛)；
+  //     ②苟权重按血量渐进 avoidScale(HP>70不苟/55~70升/低血降至0.3/濒死0,即"吃饱了才苟")；
+  //     ③多目标抢食 mcDirScore(对所有我领先的食物按方向递减累计,不再只盯单一目标)；④急食阈值 lowHp 55→65 前移。
+  genesisGoSagePro: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp,myDir=self.dir,myBody=self.body;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var PM={ R:3, safeW:1.2, crowdGain:0.07, crowdMax:1.9, aggrBase:1.0, dGain:0.30,
+      suppress:0.4, h2hPen:120, h2hSoftPen:35, foodBase:54, hungerFood:150,
+      centerW:0.5, siegeW:1.6, blockW:5, antiPredict:6,
+      // 围棋式残局参数
+      territW:2.2, cutW:30, lookahead:1.0,
+      // —— 四合一混战增强参数 ——
+      mcLeadW:9,      // ①④ 多源势力图抢食：食物"到达领先步数"权重(领先越多越想抢)
+      mcLoseW:4,      // 抢不赢的食物降权惩罚(避免做无用功送命)
+      mcAvoidW:4,     // ② 苟：远离蛇群扎堆区权重(蛇数≥3时)
+      mcKillW:55,     // ③ 主动头碰头吃短蛇：明显更长+落点安全时的清场奖励
+      mcKillLenGap:2  // 判定"明显更长"的长度差阈值
+    };
+    var blocked={},selfSet={},tails={},enemies=[];
+    for(var j=0;j<myBody.length;j++){var p=myBody[j];blocked[K(p.x,p.y)]=true;selfSet[K(p.x,p.y)]=true;}
+    tails[K(myBody[myBody.length-1].x,myBody[myBody.length-1].y)]=true;
+    for(var i=0;i<state.snakes.length;i++){var s=state.snakes[i];if(!s.alive||s.id===self.id)continue;
+      for(var b=0;b<s.body.length;b++)blocked[K(s.body[b].x,s.body[b].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      enemies.push({x:s.head.x,y:s.head.y,len:s.length,dir:s.dir,body:s.body});}
+    var foe=enemies.length===1?enemies[0]:null, endgame=!!foe;
+    var aliveN=enemies.length+1;
+    var persona = aliveN<=2?0 : aliveN>=4?1 : 0.5;
+    var W_safe   = PM.safeW*(1+persona*0.4);
+    var W_food   = 1+persona*0.10;
+    var W_h2h    = PM.h2hPen*(1+persona*0.8);
+    var W_h2hSoft= PM.h2hSoftPen*(1+persona*0.6);
+    var W_center = PM.centerW*(1-persona*0.4);
+    var W_avoid  = persona*0.3;
+    // 头碰头双级 + 记录"更短可吃"的对手蛇头格(供③主动吃)
+    var h2hHard={},h2hSoft={},killHeads={};
+    for(var ei=0;ei<enemies.length;ei++){var e=enemies[ei];for(var d in D){if(d===OPP[e.dir])continue;var hk=K(e.x+D[d].x,e.y+D[d].y);
+      if(e.len>=myLen)h2hHard[hk]=true;
+      else { h2hSoft[hk]=true; if(myLen-e.len>=PM.mcKillLenGap) killHeads[hk]=true; } }}
+    var foods=state.foods||[];
+    var eat=foods.filter(function(f){return f.type!=='spider';});
+    var poison={};foods.forEach(function(f){if(f.type==='spider')poison[K(f.x,f.y)]=true;});
+    var density=eat.length, crowd=0;
+    for(var ci=0;ci<enemies.length;ci++){var ee=enemies[ci];for(var bb=0;bb<ee.body.length;bb++){var c=ee.body[bb];if(Math.abs(c.x-head.x)+Math.abs(c.y-head.y)<=PM.R)crowd++;}
+      if(Math.abs(ee.x-head.x)+Math.abs(ee.y-head.y)<=PM.R+1)crowd+=2;}
+    var lowHp=myHp<65,critHp=myHp<25,highHp=myHp>70;   // ④ 急食阈值前移 55→65：更早积极觅食，别等快饿死
+    var aggr=PM.aggrBase+density*PM.dGain+(lowHp?0.8:0)-(highHp?0.3:0);
+    if(aggr<0.3)aggr=0.3;if(aggr>2.4)aggr=2.4;
+    var caution=1+crowd*PM.crowdGain;if(caution>PM.crowdMax)caution=PM.crowdMax;
+    caution+=persona*0.15;if(caution>PM.crowdMax+0.3)caution=PM.crowdMax+0.3;
+    var fsm=critHp?'starve':(endgame&&myLen>=foe.len?'hunt':(crowd>=6?'survive':'forage'));
+    var fsmSafe=(fsm==='survive')?1.5:(fsm==='hunt')?0.9:1.0;
+    var fsmFood=(fsm==='starve')?1.8:(fsm==='survive')?0.7:1.0;
+    var inB=function(x,y){return x>=0&&y>=0&&x<W&&y<H;};
+    var passable=function(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k])return t&&tails[k];return true;};
+    var flood=function(sx,sy){if(!passable(sx,sy,true))return 0;var seen={};var stk=[[sx,sy]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y;if(!seen[K(nx,ny)]&&passable(nx,ny,true))stk.push([nx,ny]);}}return n;};
+    var openNb=function(x,y){var n=0;for(var d in D)if(passable(x+D[d].x,y+D[d].y,true))n++;return n;};
+    var tailConn=function(nx,ny,ef){var nb,nt;if(ef){nb=[{x:nx,y:ny}].concat(myBody);nt=myBody[myBody.length-1];}else{nb=[{x:nx,y:ny}].concat(myBody.slice(0,-1));nt=myBody[myBody.length-2];}
+      if(!nt)return true;var ntK=K(nt.x,nt.y);var sb={};for(var i=0;i<nb.length-1;i++)sb[K(nb[i].x,nb[i].y)]=true;
+      var seen={};var stk=[[nx,ny]];while(stk.length){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;if(ck===ntK)return true;
+        for(var d in D){var ax=cx+D[d].x,ay=cy+D[d].y,ak=K(ax,ay);if(!inB(ax,ay)||seen[ak])continue;if(blocked[ak]&&!selfSet[ak])continue;if(sb[ak])continue;stk.push([ax,ay]);}}return false;};
+    var enemyReach=function(extra){if(!foe)return 0;var seen={};var stk=[[foe.x,foe.y]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(seen[k])continue;if(!inB(nx,ny))continue;if(blocked[k]&&!tails[k])continue;if(extra&&extra[k])continue;stk.push([nx,ny]);}}return n;};
+    var nearestFoe=function(x,y){var m=99;for(var k=0;k<enemies.length;k++){var dd=Math.abs(enemies[k].x-x)+Math.abs(enemies[k].y-y);if(dd<m)m=dd;}return m;};
+    var cx0=(W-1)/2,cy0=(H-1)/2;
+
+    // ====== 阶段门控 ======
+    var phase = (critHp || crowd>=8) ? 'SURVIVAL'
+              : (endgame && myLen>=foe.len) ? 'ENDGAME'
+              : ((myLen<8 || (myHp>60 && density>=3)) && !endgame) ? 'OPENING'
+              : 'MIDGAME';
+    var multiSnake = aliveN>=3;   // 多蛇期：四合一混战增强生效
+    var endgameGain = phase==='ENDGAME' ? 1.0 : (phase==='MIDGAME' && !multiSnake ? 0.15 : 0.0);
+    var gFood   = phase==='OPENING'?1.35 : phase==='SURVIVAL'?(critHp?1.6:0.8) : phase==='ENDGAME'?0.7 : 1.0;
+    var gCenter = phase==='OPENING'?1.1  : phase==='ENDGAME'?0.5 : phase==='SURVIVAL'?0.3 : 1.0;
+    var gSafe   = phase==='SURVIVAL'?1.6 : 1.0;
+
+    // ====== ①④ 多源 BFS 势力图：从我头 + 所有对手头同时泛洪，每格记"我距离"与"最近对手距离" ======
+    //   用于：每个食物算"我到达 - 最近对手到达"的领先步数(lead)；lead>0 我先到。
+    var myDist={}, foeDist={};
+    var multiBFS=function(){
+      // 我方单源
+      (function(){ var q=[[head.x,head.y]],qi=0; myDist[K(head.x,head.y)]=0;
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=myDist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||(blocked[k]&&!tails[k])||myDist[k]!=null)continue;myDist[k]=cd+1;q.push([nx,ny]);}}})();
+      // 对手多源(所有敌头同时入队，得每格"最近对手距离")
+      (function(){ var q=[],qi=0; for(var k2=0;k2<enemies.length;k2++){var e=enemies[k2];var ek=K(e.x,e.y);if(foeDist[ek]==null){foeDist[ek]=0;q.push([e.x,e.y]);}}
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=foeDist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||(blocked[k]&&!tails[k])||foeDist[k]!=null)continue;foeDist[k]=cd+1;q.push([nx,ny]);}}})();
+    };
+    if(multiSnake && eat.length) multiBFS();
+    // 多目标抢食：复用我方带 first 的 BFS，对【所有我领先(lead>0)的食物】按方向聚合分数，
+    // 而非只盯单一最优目标——避免唯一目标方向被苟/避碰信号盖掉时整盘不抢食。
+    var mcTarget=null, mcBest=-1e9;     // 仍保留"最优单目标"用于参考(主目标加成)
+    var mcDirScore={up:0,down:0,left:0,right:0};   // ③ 每个方向的多目标抢食累计分
+    if(multiSnake && eat.length){
+      // 带 first 的我方 BFS
+      var seen={};seen[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;
+      var firstOf={};
+      while(qi<q.length){var nd=q[qi++];for(var dd in D){var nx=nd.x+D[dd].x,ny=nd.y+D[dd].y,nk=K(nx,ny);
+        if(seen[nk]||!passable(nx,ny,true))continue;if(nd.dist===0&&(h2hHard[nk]||poison[nk]))continue;
+        seen[nk]=true;var fd=nd.first||dd;firstOf[nk]={dir:fd,dist:nd.dist+1};q.push({x:nx,y:ny,first:fd,dist:nd.dist+1});}}
+      eat.forEach(function(f){var fk=K(f.x,f.y);var info=firstOf[fk];if(!info)return;
+        var fd2=foeDist[fk]; var lead = (fd2==null? 6 : (fd2 - info.dist));   // 对手到不了→我大优(给+6)
+        var typeV=(f.type==='peach'?1.6:1.0);
+        var score = lead*typeV - info.dist*0.4;   // 领先越多、越近、价值越高越想抢
+        if(score>mcBest){mcBest=score;mcTarget={dir:info.dir,dist:info.dist,lead:lead,type:f.type};}
+        // ③ 多目标：只对"我领先(lead>0)"的食物给方向加分，按距离递减(近的权重高)
+        if(lead>0){
+          var contribute = lead*typeV/(info.dist+1);   // 领先×价值÷(距离+1)，越近贡献越大
+          if(mcDirScore[info.dir]!=null) mcDirScore[info.dir]+=contribute;
+        }
+      });
+    }
+
+    // ====== 围棋式残局工具(决赛圈用，原样保留) ======
+    var territory=function(myH, foeH, blk){
+      var distM={}, distF={};
+      (function(src,dist){ var q=[src],qi=0; dist[K(src[0],src[1])]=0;
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=dist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||blk[k]||dist[k]!=null)continue;dist[k]=cd+1;q.push([nx,ny]);}}})(myH,distM);
+      (function(src,dist){ var q=[src],qi=0; dist[K(src[0],src[1])]=0;
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=dist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||blk[k]||dist[k]!=null)continue;dist[k]=cd+1;q.push([nx,ny]);}}})(foeH,distF);
+      var mine=0,foeC=0,foeCells={};
+      for(var x=0;x<W;x++)for(var y=0;y<H;y++){var k=K(x,y);if(blk[k])continue;
+        var dm=distM[k],df=distF[k];
+        if(dm==null&&df==null)continue;
+        if(df==null||(dm!=null&&dm<df))mine++;
+        else if(dm==null||df<dm){foeC++;foeCells[k]=true;}
+      }
+      var cuts=0,vis={};
+      for(var fk in foeCells){ if(vis[fk])continue; cuts++; var stk=[fk.split(',').map(Number)];vis[fk]=true;
+        while(stk.length){var c=stk.pop();for(var d in D){var nx=c[0]+D[d].x,ny=c[1]+D[d].y,nk=K(nx,ny);if(foeCells[nk]&&!vis[nk]){vis[nk]=true;stk.push([nx,ny]);}}}}
+      return {mine:mine, foe:foeC, cuts:cuts};
+    };
+    var evalEnd=function(myH, foeH, blk){ var t=territory(myH, foeH, blk); return (t.mine - t.foe)*PM.territW + t.cuts*PM.cutW; };
+    // 非多蛇期(1v1/仅2条)的原版 BFS 食物路径，循环外只算一次
+    var fp1v1=null;
+    if(!multiSnake && eat.length){
+      var goalF={};eat.forEach(function(f){goalF[K(f.x,f.y)]=f.type;});var seenF={};seenF[K(head.x,head.y)]=true;var qF=[{x:head.x,y:head.y,first:null,dist:0}],qiF=0;
+      while(qiF<qF.length){var nd=qF[qiF++];for(var dd in D){var nx2=nd.x+D[dd].x,ny2=nd.y+D[dd].y,nk2=K(nx2,ny2);if(seenF[nk2]||!passable(nx2,ny2,true))continue;if(nd.dist===0&&(h2hHard[nk2]||poison[nk2]))continue;seenF[nk2]=true;var fd3=nd.first||dd;
+        if(goalF[nk2]&&!poison[nk2]){fp1v1={dir:fd3,dist:nd.dist+1,type:goalF[nk2]};break;}qF.push({x:nx2,y:ny2,first:fd3,dist:nd.dist+1});}if(fp1v1)break;}
+    }
+    var minimaxEnd=function(myNx,myNy,blk0){
+      var blk1={}; for(var k in blk0)blk1[k]=true; blk1[K(myNx,myNy)]=true;
+      var worst=1e9, any=false;
+      for(var d in D){ if(d===OPP[foe.dir])continue;
+        var fx=foe.x+D[d].x, fy=foe.y+D[d].y, fk=K(fx,fy);
+        if(!inB(fx,fy)||blk1[fk])continue;
+        any=true;
+        var blk2={}; for(var k2 in blk1)blk2[k2]=true; blk2[fk]=true;
+        var v=evalEnd([myNx,myNy],[fx,fy],blk2);
+        if(v<worst)worst=v;
+      }
+      if(!any) return 9999;
+      return worst;
+    };
+
+    var cand=[];
+    for(var d in D){if(d===OPP[myDir])continue;var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      if(poison[nk]&&!(critHp&&aggr>1.8))continue;
+      var sc=0;
+      if(!tailConn(nx,ny,false)||!tailConn(nx,ny,true))sc-=100000;
+      var sp=flood(nx,ny);
+      sc+=sp*(W_safe+caution*0.4)*fsmSafe*gSafe;
+      if(sp<myLen)sc-=(myLen-sp)*180*(1+persona*0.3);
+      if(sp<myLen*0.5)sc-=2500;
+      if(openNb(nx,ny)<=1)sc-=160*caution;
+      // 头碰头：硬危险重罚；软危险默认躲，但③多蛇期我明显更长+落点安全则反转为"主动吃"奖励
+      if(h2hHard[nk])sc-=W_h2h*caution;
+      else if(h2hSoft[nk]){
+        if(multiSnake && killHeads[nk] && sp>=myLen) sc+=PM.mcKillW;   // ③ 主动撞短蛇清场
+        else sc-=W_h2hSoft*caution;
+      }
+      // 觅食：决赛圈/非多蛇用原 bfs 路径逻辑(下方)，多蛇期改用多源势力图目标
+      if(multiSnake){
+        // ③ 多目标抢食：对所有"我领先"的食物按方向累计分(不再只认单一目标)
+        if(mcDirScore[d]>0) sc += mcDirScore[d]*PM.mcLeadW*gFood;
+        // ①④ 主目标额外加成 + 抢食基础拉力(去掉 0.8 折，发育期靠 gFood 放大反而更猛)
+        if(mcTarget && mcTarget.dir===d){
+          var lead=mcTarget.lead;
+          if(lead>0) sc += lead*PM.mcLeadW*0.5*(mcTarget.type==='peach'?1.3:1.0)*gFood;  // 主目标额外半权加成
+          else sc -= (-lead)*PM.mcLoseW;   // 抢不赢→轻罚(别去送命)
+          // 抢食基础拉力：原来非低血乘 0.8 削弱了开局，现去掉折扣，完全交给 gFood(发育期1.35)调节
+          var fb2=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.4:PM.foodBase);
+          sc += fb2*aggr/Math.pow(caution,PM.suppress)*fsmFood*gFood - mcTarget.dist*1.0;
+        }
+        // ② 苟到决赛圈：远离蛇群——改为"吃饱了才苟"，按血量渐进。
+        //   HP高(>70)几乎不苟(avoidScale≈0，开局放心抢)；HP越低苟越弱(要抢食保命)；中等偏低且蛇多时最苟。
+        //   avoidScale: HP>70→0；55~70→线性0→1；25~55→1降到0.3(开始要抢食)；<25(critHp)→0(全力抢)
+        var avoidScale = critHp ? 0
+          : (myHp>70 ? 0
+          : (myHp>=55 ? (70-myHp)/15            // 70→0, 55→1
+          : 0.3 + (myHp-25)/30*0.7));           // 55→1, 25→0.3
+        if(avoidScale>0) sc += nearestFoe(nx,ny)*PM.mcAvoidW*avoidScale;
+      }else{
+        // 非多蛇(1v1 或仅2条)：沿用原 BFS 食物路径(循环外已算 fp1v1)
+        if(fp1v1&&fp1v1.dir===d){
+          var fbase=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.6:PM.foodBase);
+          var tb=fp1v1.type==='peach'?1.4:1.0;
+          sc+=fbase*aggr/Math.pow(caution,PM.suppress)*fsmFood*tb*W_food*gFood-fp1v1.dist*1.2;
+        }
+      }
+      for(var fi=0;fi<eat.length;fi++){if(eat[fi].x===nx&&eat[fi].y===ny){sc+=(eat[fi].type==='peach'?70:30)*fsmFood*(lowHp?1.5:1)*W_food*gFood;break;}}
+      sc+=(W-(Math.abs(nx-cx0)+Math.abs(ny-cy0)))*W_center*(critHp?0.3:1)*gCenter;
+      if(W_avoid>0 && !multiSnake)sc+=nearestFoe(nx,ny)*3*W_avoid;   // 旧的远离逻辑只在非多蛇(避免和②重复)
+      if(foe&&myLen>foe.len)sc+=(W-(Math.abs(nx-foe.x)+Math.abs(ny-foe.y)))*0.7*(phase==='ENDGAME'?1.2:1);
+      // ====== 围棋式残局博弈：仅决赛圈(1v1)全功率 ======
+      if(endgame && sp>=myLen && endgameGain>0){
+        var blkS={}; for(var bk in blocked)blkS[bk]=true; blkS[nk]=true;
+        var tr=territory([nx,ny],[foe.x,foe.y],blkS);
+        var foeRatio = tr.foe/(tr.mine+tr.foe+1);
+        var wStatic  = 0.6 + (1-foeRatio)*0.8;
+        var wLook    = 0.4 + foeRatio*0.9;
+        sc += (tr.mine - tr.foe)*PM.territW*wStatic*endgameGain;
+        sc += tr.cuts*PM.cutW*endgameGain;
+        if(tr.foe>0 && tr.foe < foe.len*1.1) sc += 500*endgameGain;
+        sc += minimaxEnd(nx, ny, blocked)*PM.lookahead*wLook*endgameGain;
+      }
+      if(d===myDir)sc-=PM.antiPredict;
+      cand.push({dir:d,score:sc});
+    }
+    if(!cand.length){var bd=myDir,ms=-1;for(var dz in D){if(dz===OPP[myDir])continue;var s2=flood(head.x+D[dz].x,head.y+D[dz].y);if(s2>ms){ms=s2;bd=dz;}}return bd;}
+    cand.sort(function(a,b){return b.score-a.score;});return cand[0].dir;
+  },
+
+  // 🏯 棋圣Ω(GoSage)：以天选Ω+ 为蓝本，残局空间博弈升级为【围棋式】+【阶段门控自适应】。
+  //   围棋三件套(仅残局全功率)：① 双源势力图(围空) ② 分断(切割对手领地) ③ 2层minimax预读。
+  //   阶段门控(2026-06-16 升级)：把博弈分 OPENING发育/MIDGAME争势/ENDGAME收官/SURVIVAL求生 四阶段，
+  //     用 endgameGain 让围棋项只在 1v1 收官期全开(开局/危急几乎关闭，专心发育/保命)；
+  //     残局内部再用"对手领地占比"让 静态势力图↔minimax预读 此消彼长(早期重预读、收尾重数地)，
+  //     解决"领地信号算两遍"的重叠。各阶段动态缩放觅食/控场/保命权重，让各策略只在该说话时发声。
+  genesisGoSage: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp,myDir=self.dir,myBody=self.body;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var PM={ R:3, safeW:1.2, crowdGain:0.07, crowdMax:1.9, aggrBase:1.0, dGain:0.30,
+      suppress:0.4, h2hPen:120, h2hSoftPen:35, foodBase:54, hungerFood:150,
+      centerW:0.5, siegeW:1.6, blockW:5, antiPredict:6,
+      // —— 围棋式残局参数 ——
+      territW:2.2,    // 势力图领地差权重(我方格-对手格)
+      cutW:30,        // 分断奖励(把对手势力切成孤立块)
+      lookahead:1.0   // 2层minimax预读领地优势权重
+    };
+    var blocked={},selfSet={},tails={},enemies=[];
+    for(var j=0;j<myBody.length;j++){var p=myBody[j];blocked[K(p.x,p.y)]=true;selfSet[K(p.x,p.y)]=true;}
+    tails[K(myBody[myBody.length-1].x,myBody[myBody.length-1].y)]=true;
+    for(var i=0;i<state.snakes.length;i++){var s=state.snakes[i];if(!s.alive||s.id===self.id)continue;
+      for(var b=0;b<s.body.length;b++)blocked[K(s.body[b].x,s.body[b].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      enemies.push({x:s.head.x,y:s.head.y,len:s.length,dir:s.dir,body:s.body});}
+    var foe=enemies.length===1?enemies[0]:null, endgame=!!foe;
+    var aliveN=enemies.length+1;
+    var persona = aliveN<=2?0 : aliveN>=4?1 : 0.5;
+    var W_safe   = PM.safeW*(1+persona*0.4);
+    var W_food   = 1+persona*0.10;
+    var W_h2h    = PM.h2hPen*(1+persona*0.8);
+    var W_h2hSoft= PM.h2hSoftPen*(1+persona*0.6);
+    var W_center = PM.centerW*(1-persona*0.4);
+    var W_avoid  = persona*0.3;
+    var h2hHard={},h2hSoft={};
+    for(var ei=0;ei<enemies.length;ei++){var e=enemies[ei];for(var d in D){if(d===OPP[e.dir])continue;var hk=K(e.x+D[d].x,e.y+D[d].y);if(e.len>=myLen)h2hHard[hk]=true;else h2hSoft[hk]=true;}}
+    var foods=state.foods||[];
+    var eat=foods.filter(function(f){return f.type!=='spider';});
+    var poison={};foods.forEach(function(f){if(f.type==='spider')poison[K(f.x,f.y)]=true;});
+    var density=eat.length, crowd=0;
+    for(var ci=0;ci<enemies.length;ci++){var ee=enemies[ci];for(var bb=0;bb<ee.body.length;bb++){var c=ee.body[bb];if(Math.abs(c.x-head.x)+Math.abs(c.y-head.y)<=PM.R)crowd++;}
+      if(Math.abs(ee.x-head.x)+Math.abs(ee.y-head.y)<=PM.R+1)crowd+=2;}
+    var lowHp=myHp<55,critHp=myHp<25,highHp=myHp>70;
+    var aggr=PM.aggrBase+density*PM.dGain+(lowHp?0.8:0)-(highHp?0.3:0);
+    if(aggr<0.3)aggr=0.3;if(aggr>2.4)aggr=2.4;
+    var caution=1+crowd*PM.crowdGain;if(caution>PM.crowdMax)caution=PM.crowdMax;
+    caution+=persona*0.15;if(caution>PM.crowdMax+0.3)caution=PM.crowdMax+0.3;
+    var fsm=critHp?'starve':(endgame&&myLen>=foe.len?'hunt':(crowd>=6?'survive':'forage'));
+    var fsmSafe=(fsm==='survive')?1.5:(fsm==='hunt')?0.9:1.0;
+    var fsmFood=(fsm==='starve')?1.8:(fsm==='survive')?0.7:1.0;
+    var inB=function(x,y){return x>=0&&y>=0&&x<W&&y<H;};
+    var passable=function(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k])return t&&tails[k];return true;};
+    var flood=function(sx,sy){if(!passable(sx,sy,true))return 0;var seen={};var stk=[[sx,sy]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y;if(!seen[K(nx,ny)]&&passable(nx,ny,true))stk.push([nx,ny]);}}return n;};
+    var openNb=function(x,y){var n=0;for(var d in D)if(passable(x+D[d].x,y+D[d].y,true))n++;return n;};
+    var tailConn=function(nx,ny,ef){var nb,nt;if(ef){nb=[{x:nx,y:ny}].concat(myBody);nt=myBody[myBody.length-1];}else{nb=[{x:nx,y:ny}].concat(myBody.slice(0,-1));nt=myBody[myBody.length-2];}
+      if(!nt)return true;var ntK=K(nt.x,nt.y);var sb={};for(var i=0;i<nb.length-1;i++)sb[K(nb[i].x,nb[i].y)]=true;
+      var seen={};var stk=[[nx,ny]];while(stk.length){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;if(ck===ntK)return true;
+        for(var d in D){var ax=cx+D[d].x,ay=cy+D[d].y,ak=K(ax,ay);if(!inB(ax,ay)||seen[ak])continue;if(blocked[ak]&&!selfSet[ak])continue;if(sb[ak])continue;stk.push([ax,ay]);}}return false;};
+    var enemyReach=function(extra){if(!foe)return 0;var seen={};var stk=[[foe.x,foe.y]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(seen[k])continue;if(!inB(nx,ny))continue;if(blocked[k]&&!tails[k])continue;if(extra&&extra[k])continue;stk.push([nx,ny]);}}return n;};
+    var nearestFoe=function(x,y){var m=99;for(var k=0;k<enemies.length;k++){var dd=Math.abs(enemies[k].x-x)+Math.abs(enemies[k].y-y);if(dd<m)m=dd;}return m;};
+    var bfsFood=function(){if(!eat.length)return null;var goal={};eat.forEach(function(f){goal[K(f.x,f.y)]=f.type;});var seen={};seen[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;
+      while(qi<q.length){var nd=q[qi++];for(var dd in D){var nx=nd.x+D[dd].x,ny=nd.y+D[dd].y,nk=K(nx,ny);if(seen[nk]||!passable(nx,ny,true))continue;if(nd.dist===0&&(h2hHard[nk]||poison[nk]))continue;seen[nk]=true;var fd=nd.first||dd;
+        if(goal[nk]&&!poison[nk]){var myd=nd.dist+1;var iWin=true;for(var k=0;k<enemies.length;k++){var ed=Math.abs(nx-enemies[k].x)+Math.abs(ny-enemies[k].y);if(ed<myd)iWin=false;}return {dir:fd,dist:myd,type:goal[nk],contest:iWin};}
+        q.push({x:nx,y:ny,first:fd,dist:nd.dist+1});}}return null;};
+    var foodPath=bfsFood();
+    var cx0=(W-1)/2,cy0=(H-1)/2;
+    // ====== 阶段门控：让各策略只在该说话的阶段全功率发声 ======
+    //  SURVIVAL求生(血危/极拥挤) > ENDGAME收官(1v1不弱) > OPENING发育(蛇短或血高且食物多) > MIDGAME争势
+    var phase = (critHp || crowd>=8) ? 'SURVIVAL'
+              : (endgame && myLen>=foe.len) ? 'ENDGAME'
+              : ((myLen<8 || (myHp>60 && density>=3)) && !endgame) ? 'OPENING'
+              : 'MIDGAME';
+    // endgameGain：围棋三件套的总开关，只在收官期全开，开局/危急几乎关闭
+    var endgameGain = phase==='ENDGAME' ? 1.0 : (phase==='MIDGAME' ? 0.15 : 0.0);
+    // 阶段化权重：觅食/控场/保命只在合适阶段发力
+    var gFood   = phase==='OPENING'?1.35 : phase==='SURVIVAL'?(critHp?1.6:0.8) : phase==='ENDGAME'?0.7 : 1.0;
+    var gCenter = phase==='OPENING'?1.1  : phase==='ENDGAME'?0.5 : phase==='SURVIVAL'?0.3 : 1.0;
+    var gSafe   = phase==='SURVIVAL'?1.6 : 1.0;
+
+    // ====== 围棋式残局工具 ======
+    // 双源 BFS 势力图：从 myH 与 foeH 同时泛洪，每格归更先到达者。
+    // 返回 {mine, foe, cuts} —— 我方领地格数、对手领地格数、对手领地的连通块数(越多=越被分断)
+    var territory=function(myH, foeH, blk){
+      var distM={}, distF={};
+      // 我方 BFS
+      (function(src,dist){ var q=[src],qi=0; dist[K(src[0],src[1])]=0;
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=dist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||blk[k]||dist[k]!=null)continue;dist[k]=cd+1;q.push([nx,ny]);}}})(myH,distM);
+      (function(src,dist){ var q=[src],qi=0; dist[K(src[0],src[1])]=0;
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=dist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||blk[k]||dist[k]!=null)continue;dist[k]=cd+1;q.push([nx,ny]);}}})(foeH,distF);
+      var mine=0,foeC=0,foeCells={};
+      for(var x=0;x<W;x++)for(var y=0;y<H;y++){var k=K(x,y);if(blk[k])continue;
+        var dm=distM[k],df=distF[k];
+        if(dm==null&&df==null)continue;
+        if(df==null||(dm!=null&&dm<df))mine++;            // 我先到
+        else if(dm==null||df<dm){foeC++;foeCells[k]=true;} // 对手先到
+        // 平手不计(中立)
+      }
+      // 对手领地的连通块数 = 分断程度
+      var cuts=0,vis={};
+      for(var fk in foeCells){ if(vis[fk])continue; cuts++; var stk=[fk.split(',').map(Number)];vis[fk]=true;
+        while(stk.length){var c=stk.pop();for(var d in D){var nx=c[0]+D[d].x,ny=c[1]+D[d].y,nk=K(nx,ny);if(foeCells[nk]&&!vis[nk]){vis[nk]=true;stk.push([nx,ny]);}}}}
+      return {mine:mine, foe:foeC, cuts:cuts};
+    };
+    // 残局静态局面评估(给定我头/敌头/封锁集)：领地差 + 分断
+    var evalEnd=function(myH, foeH, blk){
+      var t=territory(myH, foeH, blk);
+      return (t.mine - t.foe)*PM.territW + t.cuts*PM.cutW;
+    };
+    // 2 层 minimax：我走 myMove → 对手所有合法回应里取"对我最差"(对手最优) → 该局面评分。
+    // blk0 = 当前全部蛇身封锁(近似：残局蛇尾会动，这里用当前身体做保守估计)
+    var minimaxEnd=function(myNx,myNy,blk0){
+      // 我方落子后，对手从 foe.head 出发选最优(对其领地最大=对我领地最小)
+      var blk1={}; for(var k in blk0)blk1[k]=true; blk1[K(myNx,myNy)]=true;  // 我新头变障碍
+      var worst=1e9, any=false;
+      for(var d in D){ if(d===OPP[foe.dir])continue;
+        var fx=foe.x+D[d].x, fy=foe.y+D[d].y, fk=K(fx,fy);
+        if(!inB(fx,fy)||blk1[fk])continue;
+        any=true;
+        var blk2={}; for(var k2 in blk1)blk2[k2]=true; blk2[fk]=true;       // 对手新头变障碍
+        var v=evalEnd([myNx,myNy],[fx,fy],blk2);                            // 我方视角领地优势
+        if(v<worst)worst=v;                                                 // 对手会选让我最差的
+      }
+      if(!any) return 9999;   // 对手无路可走→我大优(它要么撞死要么困死)
+      return worst;
+    };
+
+    var cand=[];
+    for(var d in D){if(d===OPP[myDir])continue;var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      if(poison[nk]&&!(critHp&&aggr>1.8))continue;
+      var sc=0;
+      if(!tailConn(nx,ny,false)||!tailConn(nx,ny,true))sc-=100000;
+      var sp=flood(nx,ny);
+      sc+=sp*(W_safe+caution*0.4)*fsmSafe*gSafe;                              // 保命×阶段(求生期放大)
+      if(sp<myLen)sc-=(myLen-sp)*180*(1+persona*0.3);
+      if(sp<myLen*0.5)sc-=2500;
+      if(openNb(nx,ny)<=1)sc-=160*caution;
+      if(h2hHard[nk])sc-=W_h2h*caution;
+      else if(h2hSoft[nk])sc-=W_h2hSoft*caution;
+      if(foodPath&&foodPath.dir===d){
+        var fbase=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.6:PM.foodBase);
+        var tb=foodPath.type==='peach'?1.4:1.0;
+        var cb=foodPath.contest?1.35:0.85;
+        sc+=fbase*aggr/Math.pow(caution,PM.suppress)*fsmFood*tb*W_food*cb*gFood-foodPath.dist*1.2; // 觅食×阶段(发育期放大)
+      }
+      for(var fi=0;fi<eat.length;fi++){if(eat[fi].x===nx&&eat[fi].y===ny){sc+=(eat[fi].type==='peach'?70:30)*fsmFood*(lowHp?1.5:1)*W_food*gFood;break;}}
+      sc+=(W-(Math.abs(nx-cx0)+Math.abs(ny-cy0)))*W_center*(critHp?0.3:1)*gCenter; // 控场×阶段
+      if(W_avoid>0)sc+=nearestFoe(nx,ny)*3*W_avoid;
+      if(foe&&myLen>foe.len)sc+=(W-(Math.abs(nx-foe.x)+Math.abs(ny-foe.y)))*0.7*(phase==='ENDGAME'?1.2:1);
+      // ====== 围棋式残局博弈：仅 1v1 且落点安全，且乘 endgameGain(只在收官期全功率) ======
+      if(endgame && sp>=myLen && endgameGain>0){
+        var blkS={}; for(var bk in blocked)blkS[bk]=true; blkS[nk]=true;
+        var tr=territory([nx,ny],[foe.x,foe.y],blkS);
+        // 静态↔动态此消彼长：对手领地占比越小(收尾)→重静态数地；越大(早期)→重minimax预读
+        // foeRatio = 对手领地 / (双方领地+1)，0~1
+        var foeRatio = tr.foe/(tr.mine+tr.foe+1);
+        var wStatic  = 0.6 + (1-foeRatio)*0.8;   // 收尾(foeRatio小)→静态权重高
+        var wLook    = 0.4 + foeRatio*0.9;        // 早期(foeRatio大)→预读权重高
+        sc += (tr.mine - tr.foe)*PM.territW*wStatic*endgameGain;   // ① 领地差(围空)
+        sc += tr.cuts*PM.cutW*endgameGain;                         // ② 分断(切割，独立维度不随seesaw)
+        if(tr.foe>0 && tr.foe < foe.len*1.1) sc += 500*endgameGain;// 致命封口
+        sc += minimaxEnd(nx, ny, blocked)*PM.lookahead*wLook*endgameGain; // ③ minimax预读
+      }
+      if(d===myDir)sc-=PM.antiPredict;
+      cand.push({dir:d,score:sc});
+    }
+    if(!cand.length){var bd=myDir,ms=-1;for(var dz in D){if(dz===OPP[myDir])continue;var s2=flood(head.x+D[dz].x,head.y+D[dz].y);if(s2>ms){ms=s2;bd=dz;}}return bd;}
+    cand.sort(function(a,b){return b.score-a.score;});return cand[0].dir;
+  },
+
+  // 🐉 天选Ω+(Apex)：综合全部实测最优策略的集大成蛇，策略组合最完整。
+  //   保命: 尾连通刚性校验 + flood-fill梯度 + 避毒 ; 对抗: 头碰头双级预测 + 残局Siege空间博弈 + 中心控场/镜像逼抢
+  //   觅食: BFS真实路径 + 按类型价值×血量 + 低血提前急食 + 【抢食速度竞赛】(比对手早到才硬抢，治混战饿死)
+  //   自适应: 双信号(食物密度+局部拥挤度) + 按存活蛇数切人格(蛇少激进/蛇多稳健)
+  //   2026-06-16 综合沉淀。1v1 vs Siege/FSM 约55%/56%(同Ω级)，混战中游。可调参集中于 PM。
+  genesisApex: function(state){
+    // 🐉 天选Ω+(Apex)：综合全部实测最优策略的集大成蛇。
+    //   保命: 尾连通刚性校验 + flood-fill梯度 + 避毒
+    //   对抗: 头碰头双级预测 + 残局Siege空间博弈 + 中心控场/镜像逼抢
+    //   觅食: BFS真实路径 + 按类型价值×血量动态 + 低血提前急食
+    //   自适应: 双信号(食物密度+局部拥挤度) + 按存活蛇数切人格
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp,myDir=self.dir,myBody=self.body;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var PM={ R:3, safeW:1.2, crowdGain:0.07, crowdMax:1.9, aggrBase:1.0, dGain:0.30,
+      suppress:0.4, h2hPen:120, h2hSoftPen:35, foodBase:54, hungerFood:150,
+      centerW:0.5, siegeW:1.6, blockW:5, antiPredict:6 };
+    var blocked={},selfSet={},tails={},enemies=[];
+    for(var j=0;j<myBody.length;j++){var p=myBody[j];blocked[K(p.x,p.y)]=true;selfSet[K(p.x,p.y)]=true;}
+    tails[K(myBody[myBody.length-1].x,myBody[myBody.length-1].y)]=true;
+    for(var i=0;i<state.snakes.length;i++){var s=state.snakes[i];if(!s.alive||s.id===self.id)continue;
+      for(var b=0;b<s.body.length;b++)blocked[K(s.body[b].x,s.body[b].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      enemies.push({x:s.head.x,y:s.head.y,len:s.length,dir:s.dir,body:s.body});}
+    var foe=enemies.length===1?enemies[0]:null, endgame=!!foe;
+    // 人格混合度：蛇少更激进(自身)、蛇多更稳健(FSM/Siege风)
+    var aliveN=enemies.length+1;
+    var persona = aliveN<=2?0 : aliveN>=4?1 : 0.5;
+    var W_safe   = PM.safeW*(1+persona*0.4);
+    var W_food   = 1+persona*0.10;
+    var W_h2h    = PM.h2hPen*(1+persona*0.8);
+    var W_h2hSoft= PM.h2hSoftPen*(1+persona*0.6);
+    var W_center = PM.centerW*(1-persona*0.4);
+    var W_avoid  = persona*0.3;
+    // 头碰头双级预测(排除对手反向格)
+    var h2hHard={},h2hSoft={};
+    for(var ei=0;ei<enemies.length;ei++){var e=enemies[ei];for(var d in D){if(d===OPP[e.dir])continue;var hk=K(e.x+D[d].x,e.y+D[d].y);if(e.len>=myLen)h2hHard[hk]=true;else h2hSoft[hk]=true;}}
+    var foods=state.foods||[];
+    var eat=foods.filter(function(f){return f.type!=='spider';});
+    var poison={};foods.forEach(function(f){if(f.type==='spider')poison[K(f.x,f.y)]=true;});
+    var density=eat.length, crowd=0;
+    for(var ci=0;ci<enemies.length;ci++){var ee=enemies[ci];for(var bb=0;bb<ee.body.length;bb++){var c=ee.body[bb];if(Math.abs(c.x-head.x)+Math.abs(c.y-head.y)<=PM.R)crowd++;}
+      if(Math.abs(ee.x-head.x)+Math.abs(ee.y-head.y)<=PM.R+1)crowd+=2;}
+    var lowHp=myHp<55,critHp=myHp<25,highHp=myHp>70;
+    var aggr=PM.aggrBase+density*PM.dGain+(lowHp?0.8:0)-(highHp?0.3:0);
+    if(aggr<0.3)aggr=0.3;if(aggr>2.4)aggr=2.4;
+    var caution=1+crowd*PM.crowdGain;if(caution>PM.crowdMax)caution=PM.crowdMax;
+    caution+=persona*0.15;if(caution>PM.crowdMax+0.3)caution=PM.crowdMax+0.3;
+    var fsm=critHp?'starve':(endgame&&myLen>=foe.len?'hunt':(crowd>=6?'survive':'forage'));
+    var fsmSafe=(fsm==='survive')?1.5:(fsm==='hunt')?0.9:1.0;
+    var fsmFood=(fsm==='starve')?1.8:(fsm==='survive')?0.7:1.0;
+    var inB=function(x,y){return x>=0&&y>=0&&x<W&&y<H;};
+    var passable=function(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k])return t&&tails[k];return true;};
+    var flood=function(sx,sy){if(!passable(sx,sy,true))return 0;var seen={};var stk=[[sx,sy]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y;if(!seen[K(nx,ny)]&&passable(nx,ny,true))stk.push([nx,ny]);}}return n;};
+    var openNb=function(x,y){var n=0;for(var d in D)if(passable(x+D[d].x,y+D[d].y,true))n++;return n;};
+    var tailConn=function(nx,ny,ef){var nb,nt;if(ef){nb=[{x:nx,y:ny}].concat(myBody);nt=myBody[myBody.length-1];}else{nb=[{x:nx,y:ny}].concat(myBody.slice(0,-1));nt=myBody[myBody.length-2];}
+      if(!nt)return true;var ntK=K(nt.x,nt.y);var sb={};for(var i=0;i<nb.length-1;i++)sb[K(nb[i].x,nb[i].y)]=true;
+      var seen={};var stk=[[nx,ny]];while(stk.length){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;if(ck===ntK)return true;
+        for(var d in D){var ax=cx+D[d].x,ay=cy+D[d].y,ak=K(ax,ay);if(!inB(ax,ay)||seen[ak])continue;if(blocked[ak]&&!selfSet[ak])continue;if(sb[ak])continue;stk.push([ax,ay]);}}return false;};
+    var enemyReach=function(extra){if(!foe)return 0;var seen={};var stk=[[foe.x,foe.y]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(seen[k])continue;if(!inB(nx,ny))continue;if(blocked[k]&&!tails[k])continue;if(extra&&extra[k])continue;stk.push([nx,ny]);}}return n;};
+    var foeBase=endgame?enemyReach(null):0;
+    var nearestFoe=function(x,y){var m=99;for(var k=0;k<enemies.length;k++){var dd=Math.abs(enemies[k].x-x)+Math.abs(enemies[k].y-y);if(dd<m)m=dd;}return m;};
+    // BFS 找食：返回 {dir,dist,type,contest}。contest=我比所有对手都更早到达该食物(可抢赢)
+    var bfsFood=function(){if(!eat.length)return null;var goal={};eat.forEach(function(f){goal[K(f.x,f.y)]=f.type;});var seen={};seen[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;
+      while(qi<q.length){var nd=q[qi++];for(var dd in D){var nx=nd.x+D[dd].x,ny=nd.y+D[dd].y,nk=K(nx,ny);if(seen[nk]||!passable(nx,ny,true))continue;if(nd.dist===0&&(h2hHard[nk]||poison[nk]))continue;seen[nk]=true;var fd=nd.first||dd;
+        if(goal[nk]&&!poison[nk]){var myd=nd.dist+1;var iWin=true;for(var k=0;k<enemies.length;k++){var ed=Math.abs(nx-enemies[k].x)+Math.abs(ny-enemies[k].y);if(ed<myd)iWin=false;}return {dir:fd,dist:myd,type:goal[nk],contest:iWin};}
+        q.push({x:nx,y:ny,first:fd,dist:nd.dist+1});}}return null;};
+    var foodPath=bfsFood();
+    var cx0=(W-1)/2,cy0=(H-1)/2;
+    var cand=[];
+    for(var d in D){if(d===OPP[myDir])continue;var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      if(poison[nk]&&!(critHp&&aggr>1.8))continue;
+      var sc=0;
+      if(!tailConn(nx,ny,false)||!tailConn(nx,ny,true))sc-=100000;          // 尾连通红线
+      var sp=flood(nx,ny);
+      sc+=sp*(W_safe+caution*0.4)*fsmSafe;
+      if(sp<myLen)sc-=(myLen-sp)*180*(1+persona*0.3);                       // 空间梯度罚
+      if(sp<myLen*0.5)sc-=2500;
+      if(openNb(nx,ny)<=1)sc-=160*caution;
+      if(h2hHard[nk])sc-=W_h2h*caution;                                      // 头碰头双级
+      else if(h2hSoft[nk])sc-=W_h2hSoft*caution;
+      if(foodPath&&foodPath.dir===d){                                        // BFS路径抢食
+        var fbase=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.6:PM.foodBase);
+        var tb=foodPath.type==='peach'?1.4:1.0;
+        // 抢食速度竞赛：我能比所有对手更早到→额外强拉(治混战饿死,先抢光资源)；抢不赢则不硬冲
+        var cb=foodPath.contest?1.35:0.85;
+        sc+=fbase*aggr/Math.pow(caution,PM.suppress)*fsmFood*tb*W_food*cb-foodPath.dist*1.2;
+      }
+      for(var fi=0;fi<eat.length;fi++){if(eat[fi].x===nx&&eat[fi].y===ny){sc+=(eat[fi].type==='peach'?70:30)*fsmFood*(lowHp?1.5:1)*W_food;break;}}
+      sc+=(W-(Math.abs(nx-cx0)+Math.abs(ny-cy0)))*W_center*(critHp?0.3:1);   // 中心控场
+      if(W_avoid>0)sc+=nearestFoe(nx,ny)*3*W_avoid;                          // 蛇多远离蛇头堆
+      if(foe&&myLen>foe.len)sc+=(W-(Math.abs(nx-foe.x)+Math.abs(ny-foe.y)))*0.7;  // 镜像逼抢
+      if(endgame&&sp>=myLen){var ex={};ex[nk]=true;var foeSp=enemyReach(ex);var sq=foeBase-foeSp;  // Siege博弈
+        if(myLen>foe.len){sc+=(sp-foeSp)*PM.siegeW;if(sq>0)sc+=sq*PM.blockW;if(foeSp>0&&foeSp<foe.len*1.1)sc+=450;}
+        else sc+=(sp-foeSp)*0.5;}
+      if(d===myDir)sc-=PM.antiPredict;                                       // 反预测
+      cand.push({dir:d,score:sc});
+    }
+    if(!cand.length){var bd=myDir,ms=-1;for(var dz in D){if(dz===OPP[myDir])continue;var s2=flood(head.x+D[dz].x,head.y+D[dz].y);if(s2>ms){ms=s2;bd=dz;}}return bd;}
+    cand.sort(function(a,b){return b.score-a.score;});return cand[0].dir;
+},
+  // 🦎 变形Ω(OmegaX)：在 Ω 基础上【按场上存活蛇数动态切换人格】。
+  //   persona = aliveN<=2?0 : aliveN>=4?1 : 0.5
+  //   蛇少(1v1,persona=0) → 纯 Ω 本体：精细控场+残局博弈+激进抢食(实测 1v1 vs Siege/FSM 58%/56%)
+  //   蛇多(persona→1)     → 偏 FSM/Siege 风：更看重空间、头碰头惩罚加重、弱化中心争夺、轻度远离蛇头堆
+  //   2026-06-16 实现。机制有效(头碰头死亡↓)，但因引擎食物稀缺，混战与原Ω统计持平；保留作可选风格。
+  genesisOmegaX: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp,myDir=self.dir,myBody=self.body;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var PM={
+      R:3, safeW:1.2, crowdGain:0.07, crowdMax:1.9,
+      aggrBase:1.0, dGain:0.30, suppress:0.4,
+      h2hPen:120, h2hSoftPen:35,
+      foodBase:52, hungerFood:140,
+      centerW:0.5, siegeW:1.6, blockW:5, antiPredict:6
+    };
+    var blocked={},selfSet={},tails={},enemies=[];
+    for(var j=0;j<myBody.length;j++){var p=myBody[j];blocked[K(p.x,p.y)]=true;selfSet[K(p.x,p.y)]=true;}
+    tails[K(myBody[myBody.length-1].x,myBody[myBody.length-1].y)]=true;
+    for(var i=0;i<state.snakes.length;i++){var s=state.snakes[i];if(!s.alive||s.id===self.id)continue;
+      for(var b=0;b<s.body.length;b++)blocked[K(s.body[b].x,s.body[b].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      enemies.push({x:s.head.x,y:s.head.y,len:s.length,dir:s.dir,body:s.body});}
+    var foe=enemies.length===1?enemies[0]:null, endgame=!!foe;
+    // ============================================================
+    // 【核心新增】按场上存活蛇数决定"人格混合度" persona ∈ [0,1]
+    //   aliveN<=2 (1v1)      → persona=0  纯 Ω 本体：精细控场+残局博弈+激进抢食
+    //   aliveN>=4 (大混战)    → persona=1  纯 FSM/Siege 风格：极致求稳、避战、压空间、少抢食
+    //   aliveN=3             → persona=0.5 过渡
+    //   蛇越多 → 越像 FSM/Siege(保守苟活，让别人先死)；蛇越少 → 越像自己(主动出击)
+    // ============================================================
+    var aliveN = 1; for(var ai2=0;ai2<state.snakes.length;ai2++){if(state.snakes[ai2].alive)aliveN++;}
+    aliveN = enemies.length+1;   // 我 + 存活敌人
+    var persona = aliveN<=2 ? 0 : aliveN>=4 ? 1 : (aliveN-2)/2;   // 0=Ω本体, 1=FSM/Siege风
+    // persona 调制各项权重：
+    var W_safe   = PM.safeW * (1 + persona*0.4);     // 蛇多→更看重安全空间(温和)
+    var W_food   = 1 + persona*0.10;                 // 蛇多→反而略提抢食(早建立长度优势，长了头碰头能吃对手)
+    var W_h2h    = PM.h2hPen * (1 + persona*0.8);    // 蛇多→头碰头惩罚加重(但只对"打不过的"，硬危险本就只标记>=我的)
+    var W_h2hSoft= PM.h2hSoftPen * (1 + persona*0.6);// 蛇多→软头碰头稍避
+    var W_center = PM.centerW * (1 - persona*0.4);   // 蛇多→弱化中心争夺
+    var W_avoidCrowd = persona*0.3;                   // 蛇多→轻度远离蛇群密集处(只避头堆，不远离食物)
+    var h2hHard={},h2hSoft={};
+    for(var ei=0;ei<enemies.length;ei++){var e=enemies[ei];for(var d in D){if(d===OPP[e.dir])continue;var hk=K(e.x+D[d].x,e.y+D[d].y);if(e.len>=myLen)h2hHard[hk]=true;else h2hSoft[hk]=true;}}
+    var foods=state.foods||[];
+    var eat=foods.filter(function(f){return f.type!=='spider';});
+    var poison={};foods.forEach(function(f){if(f.type==='spider')poison[K(f.x,f.y)]=true;});
+    var density=eat.length, crowd=0;
+    for(var ci=0;ci<enemies.length;ci++){var ee=enemies[ci];for(var bb=0;bb<ee.body.length;bb++){var c=ee.body[bb];if(Math.abs(c.x-head.x)+Math.abs(c.y-head.y)<=PM.R)crowd++;}
+      if(Math.abs(ee.x-head.x)+Math.abs(ee.y-head.y)<=PM.R+1)crowd+=2;}
+    var lowHp=myHp<55,critHp=myHp<25,highHp=myHp>70;
+    var aggr=PM.aggrBase+density*PM.dGain+(lowHp?0.8:0)-(highHp?0.3:0);
+    if(aggr<0.3)aggr=0.3;if(aggr>2.4)aggr=2.4;
+    var caution=1+crowd*PM.crowdGain;if(caution>PM.crowdMax)caution=PM.crowdMax;
+    // 蛇多时基础 caution 略抬高(FSM/Siege 风格更怕碰撞，但不过度)
+    caution += persona*0.15; if(caution>PM.crowdMax+0.3)caution=PM.crowdMax+0.3;
+    var fsm = critHp ? 'starve' : (endgame && myLen>=foe.len ? 'hunt' : (crowd>=6 ? 'survive' : 'forage'));
+    var fsmSafe = (fsm==='survive')?1.5:(fsm==='hunt')?0.9:1.0;
+    var fsmFood = (fsm==='starve')?1.8:(fsm==='survive')?0.7:1.0;
+    var inB=function(x,y){return x>=0&&y>=0&&x<W&&y<H;};
+    var passable=function(x,y,allowTail){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k])return allowTail&&tails[k];return true;};
+    var flood=function(sx,sy){if(!passable(sx,sy,true))return 0;var seen={};var stk=[[sx,sy]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y;if(!seen[K(nx,ny)]&&passable(nx,ny,true))stk.push([nx,ny]);}}return n;};
+    var openNb=function(x,y){var n=0;for(var d in D)if(passable(x+D[d].x,y+D[d].y,true))n++;return n;};
+    var tailConn=function(nx,ny,eatF){var nb,nt;if(eatF){nb=[{x:nx,y:ny}].concat(myBody);nt=myBody[myBody.length-1];}else{nb=[{x:nx,y:ny}].concat(myBody.slice(0,-1));nt=myBody[myBody.length-2];}
+      if(!nt)return true;var ntK=K(nt.x,nt.y);var sb={};for(var i=0;i<nb.length-1;i++)sb[K(nb[i].x,nb[i].y)]=true;
+      var seen={};var stk=[[nx,ny]];while(stk.length){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;if(ck===ntK)return true;
+        for(var d in D){var ax=cx+D[d].x,ay=cy+D[d].y,ak=K(ax,ay);if(!inB(ax,ay)||seen[ak])continue;if(blocked[ak]&&!selfSet[ak])continue;if(sb[ak])continue;stk.push([ax,ay]);}}return false;};
+    var enemyReach=function(extra){if(!foe)return 0;var seen={};var stk=[[foe.x,foe.y]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(seen[k])continue;if(!inB(nx,ny))continue;if(blocked[k]&&!(tails[k]))continue;if(extra&&extra[k])continue;stk.push([nx,ny]);}}return n;};
+    var foeBase=endgame?enemyReach(null):0;
+    // 敌方蛇头到落点的最小距离(用于蛇多时"远离蛇群")
+    var nearestFoeDist=function(x,y){var m=99;for(var k=0;k<enemies.length;k++){var dd=Math.abs(enemies[k].x-x)+Math.abs(enemies[k].y-y);if(dd<m)m=dd;}return m;};
+    var bfsFood=function(){if(!eat.length)return null;var goal={};eat.forEach(function(f){goal[K(f.x,f.y)]=f.type;});var seen={};seen[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;
+      while(qi<q.length){var nd=q[qi++];for(var dd in D){var nx=nd.x+D[dd].x,ny=nd.y+D[dd].y,nk=K(nx,ny);if(seen[nk]||!passable(nx,ny,true))continue;if(nd.dist===0&&(h2hHard[nk]||poison[nk]))continue;seen[nk]=true;var fd=nd.first||dd;if(goal[nk]&&!poison[nk])return {dir:fd,dist:nd.dist+1,type:goal[nk]};q.push({x:nx,y:ny,first:fd,dist:nd.dist+1});}}return null;};
+    var foodPath=bfsFood();
+    var cx0=(W-1)/2,cy0=(H-1)/2;
+    var cand=[];
+    for(var d in D){if(d===OPP[myDir])continue;var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      if(poison[nk]&&!(critHp&&aggr>1.8))continue;
+      var sc=0;
+      if(!tailConn(nx,ny,false)||!tailConn(nx,ny,true))sc-=100000;
+      var sp=flood(nx,ny);
+      sc+=sp*(W_safe+caution*0.4)*fsmSafe;                       // persona 调制：蛇多更看重空间
+      if(sp<myLen)sc-=(myLen-sp)*180*(1+persona*0.3);            // 蛇多→空间不足罚略重
+      if(sp<myLen*0.5)sc-=2500;
+      if(openNb(nx,ny)<=1)sc-=160*caution;
+      if(h2hHard[nk])sc-=W_h2h*caution;                          // persona 调制：蛇多头碰头罚翻倍
+      else if(h2hSoft[nk])sc-=W_h2hSoft*caution;
+      if(foodPath&&foodPath.dir===d){
+        var fbase=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.6:PM.foodBase);
+        var typeBonus=foodPath.type==='peach'?1.4:1.0;
+        sc+=fbase*aggr/Math.pow(caution,PM.suppress)*fsmFood*typeBonus*W_food-foodPath.dist*1.2;  // persona 调制：蛇多降抢食
+      }
+      for(var fi=0;fi<eat.length;fi++){if(eat[fi].x===nx&&eat[fi].y===ny){sc+=(eat[fi].type==='peach'?70:30)*fsmFood*(lowHp?1.5:1)*W_food;break;}}
+      sc+=(W-(Math.abs(nx-cx0)+Math.abs(ny-cy0)))*W_center*(critHp?0.3:1);   // persona 调制：蛇多放弃中心
+      // 【蛇多新增】远离蛇群：落点离最近敌头越远越好(FSM避险核心)
+      if(W_avoidCrowd>0){ sc += nearestFoeDist(nx,ny) * 3 * W_avoidCrowd; }
+      if(foe&&myLen>foe.len){sc+=(W-(Math.abs(nx-foe.x)+Math.abs(ny-foe.y)))*0.7;}
+      if(endgame&&sp>=myLen){var extra={};extra[nk]=true;var foeSp=enemyReach(extra);var squeeze=foeBase-foeSp;
+        if(myLen>foe.len){sc+=(sp-foeSp)*PM.siegeW;if(squeeze>0)sc+=squeeze*PM.blockW;if(foeSp>0&&foeSp<foe.len*1.1)sc+=450;}
+        else{sc+=(sp-foeSp)*0.5;}}
+      if(d===myDir)sc-=PM.antiPredict;
+      cand.push({dir:d,score:sc});
+    }
+    if(!cand.length){var bestDir=myDir,ms=-1;for(var dz in D){if(dz===OPP[myDir])continue;var sp2=flood(head.x+D[dz].x,head.y+D[dz].y);if(sp2>ms){ms=sp2;bestDir=dz;}}return bestDir;}
+    cand.sort(function(a,b){return b.score-a.score;});return cand[0].dir;
+},
 };
 
 /* ============================================================
@@ -1296,6 +2373,17 @@ function getFoodWeights(){
   const g=(id,def)=>{ const v=parseFloat((document.getElementById(id)||{}).value); return isNaN(v)||v<0?def:v; };
   return { bun:g('food-bun',55), peach:g('food-peach',15), spider:g('food-spider',30) };
 }
+// 鲁棒性训练/测试用的极端食物比例集合（域随机化 & 多比例回测共用）
+const ROBUST_SCENARIOS = [
+  { name:'默认',     w:{bun:55,peach:15,spider:30} },
+  { name:'毒蜘蛛海', w:{bun:10,peach:5, spider:85} },
+  { name:'蟠桃盛宴', w:{bun:10,peach:80,spider:10} },
+  { name:'全是包子', w:{bun:90,peach:5, spider:5}  },
+  { name:'高危少食', w:{bun:20,peach:10,spider:70} },
+  { name:'均衡',     w:{bun:34,peach:33,spider:33} },
+];
+// 随机抽一种极端比例（域随机化）
+function randomFoodWeights(){ return ROBUST_SCENARIOS[(Math.random()*ROBUST_SCENARIOS.length)|0].w; }
 // 渲染比例条与百分比文字
 function renderFoodRatio(){
   const w=getFoodWeights();
@@ -1332,6 +2420,13 @@ function builtinSrc(fn){
 }
 // 内置陪练清单（统一来源，seed 与"补齐缺失"都用它）
 const BUILTIN_LIST = [
+  { name:'🏯棋圣Ω·弈',  pal:0, fn:'genesisGoSagePro' },
+  { name:'🏯棋圣Ω',     pal:3, fn:'genesisGoSage' },
+  { name:'🐉天选Ω+',    pal:1, fn:'genesisApex' },
+  { name:'👑集大成Ω',   pal:4, fn:'genesisOmega' },
+  { name:'🦎变形Ω',     pal:2, fn:'genesisOmegaX' },
+  { name:'🧬新范式G1',  pal:7, fn:'genesisG1' },
+  { name:'🌀双信号G2',  pal:5, fn:'genesisDual2' },
   { name:'🎯围猎Siege', pal:6, fn:'hunterSiege' },
   { name:'🤖状态机FSM', pal:3, fn:'hunterFSM' },
   { name:'👑猎手Pro+',  pal:5, fn:'hunterProPlus' },
@@ -1425,11 +2520,96 @@ function restoreRoster(){
 }
 // 重置擂台为初始内置陪练（清掉本地存档）
 function resetRoster(){
-  if(!confirm('确定重置擂台？将清除所有上传/进化的蛇，恢复为初始内置陪练。')) return;
+  if(!confirm('确定重置擂台？将清除所有上传/进化的蛇，恢复为初始内置陪练。（归档库不受影响）')) return;
   localStorage.removeItem(ROSTER_KEY);
   roster = []; nextId = 1;
   seedBuiltins();
   toast('已重置为初始陪练');
+}
+
+/* ============================================================
+   归档库：被淘汰但要保留的蛇（不参赛、不训练，仅存档供查看/对比/调回）
+   只存元数据，不编译 ai、不进 roster。
+   ============================================================ */
+const ARCHIVE_KEY = 'snake_archive_v1';
+let archive = [];   // [{name,color,code,wins,plays,fromBig,time}]
+
+function persistArchive(){
+  try{ localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive)); }catch(e){}
+}
+function restoreArchive(){
+  try{ const d=JSON.parse(localStorage.getItem(ARCHIVE_KEY)||'null'); if(Array.isArray(d)) archive=d; }catch(e){ archive=[]; }
+  updateArchiveCount();
+}
+// 把一条蛇归档（从擂台移除前调用）。winRate 取当时战绩
+function archiveSnake(r, fromBig){
+  if(!r || !r.code) return;
+  archive.push({
+    name:r.name, color:r.color, code:r.code,
+    wins:r.wins||0, plays:r.plays||0, points:r.points||0,
+    fromBig: fromBig||(autoState&&autoState.big)||null,
+    time: new Date().toLocaleString('zh-CN'),
+  });
+  persistArchive();
+  updateArchiveCount();
+}
+// 把归档蛇调回擂台（重新编译加入 roster，名字去重）
+function reviveFromArchive(idx){
+  const a=archive[idx]; if(!a) return;
+  let aiFn;
+  try{ aiFn = compileAI(a.code, a.name); }
+  catch(e){ toast('❌ 该归档蛇代码无法编译：'+e.message); return; }
+  const name=uniqueSnakeName(a.name);
+  const color=a.color||PALETTE[roster.length % PALETTE.length];
+  addRoster(name, color, a.code, aiFn);
+  toast('🔙 已把「'+name+'」调回擂台');
+  renderArchiveList();
+}
+function deleteFromArchive(idx){
+  if(idx<0||idx>=archive.length) return;
+  const a=archive[idx];
+  if(!confirm('从归档库永久删除「'+a.name+'」？此操作不可恢复。')) return;
+  archive.splice(idx,1); persistArchive(); updateArchiveCount(); renderArchiveList();
+}
+function clearArchive(){
+  if(!archive.length){ toast('归档库已是空的'); return; }
+  if(!confirm('清空整个归档库（共 '+archive.length+' 条）？此操作不可恢复。')) return;
+  archive=[]; persistArchive(); updateArchiveCount(); renderArchiveList();
+  toast('归档库已清空');
+}
+function updateArchiveCount(){
+  const el=document.getElementById('archive-count');
+  if(el) el.textContent = archive.length? ('('+archive.length+')') : '';
+}
+function openArchive(){
+  document.getElementById('modal-archive').classList.add('show');
+  renderArchiveList();
+}
+function renderArchiveList(){
+  const box=document.getElementById('archive-list'); if(!box) return;
+  const stat=document.getElementById('archive-stat'); if(stat) stat.textContent='共 '+archive.length+' 条归档蛇';
+  if(!archive.length){ box.innerHTML='<p class="muted">归档库为空。用「精英种群+存档」策略训练后，被淘汰的蛇会出现在这里。</p>'; return; }
+  // 按胜率降序展示
+  const items=archive.map((a,idx)=>({a,idx})).sort((x,y)=>{
+    const wx=x.a.plays?x.a.wins/x.a.plays:0, wy=y.a.plays?y.a.wins/y.a.plays:0; return wy-wx;
+  });
+  box.innerHTML=items.map(({a,idx})=>{
+    const wr=a.plays? Math.round(100*a.wins/a.plays)+'%' : '—';
+    const codeId='arccode-'+idx;
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="dot" style="background:${a.color||'#888'}"></span>
+        <b style="font-size:13px;">${escapeHtml(a.name)}</b>
+        <span class="muted" style="font-size:11px;">胜率 ${wr} · ${a.plays||0}场${a.fromBig?(' · 第'+a.fromBig+'大循环淘汰'):''}</span>
+        <span style="margin-left:auto;display:flex;gap:6px;">
+          <button class="btn-sm" onclick="reviveFromArchive(${idx})" style="font-size:11px;background:var(--accent2);color:#fff;border-color:var(--accent2);">🔙 调回擂台</button>
+          <button class="btn-sm" onclick="(function(){var e=document.getElementById('${codeId}');e.style.display=e.style.display==='none'?'':'none';})()" style="font-size:11px;">{ } 代码</button>
+          <button class="btn-sm" onclick="deleteFromArchive(${idx})" style="font-size:11px;color:var(--red);">删除</button>
+        </span>
+      </div>
+      <pre id="${codeId}" style="display:none;margin-top:8px;max-height:200px;overflow:auto;background:var(--panel2);border-radius:6px;padding:8px;font-size:11px;white-space:pre-wrap;">${escapeHtml(a.code||'')}</pre>
+    </div>`;
+  }).join('');
 }
 
 /* ============================================================
@@ -1448,6 +2628,7 @@ function exportBackup(){
     meta:    safeParse(localStorage.getItem(META_KEY), null),
     llmCfg:  safeParse(localStorage.getItem(LLM_CFG_KEY), {}),
     pool:    safeParse(localStorage.getItem(POOL_KEY), {}),
+    archive: safeParse(localStorage.getItem(ARCHIVE_KEY), []),
   };
   // 配置里的 apiKey 出于安全默认抹掉（避免明文外泄），保留 baseUrl/model
   if(backup.llmCfg && backup.llmCfg.apiKey) backup.llmCfg = { baseUrl:backup.llmCfg.baseUrl, model:backup.llmCfg.model };
@@ -1491,6 +2672,12 @@ function applyBackup(data, mode){
   }
   if(data.meta) saveMeta(data.meta);
   if(data.pool && typeof data.pool==='object') savePool(data.pool);
+  // 归档库：replace 覆盖，merge 追加
+  if(Array.isArray(data.archive)){
+    if(mode==='merge'){ archive = data.archive.concat(archive); }
+    else { archive = data.archive.slice(); }
+    persistArchive(); updateArchiveCount();
+  }
   if(data.llmCfg && data.llmCfg.baseUrl){
     const cur = loadLlmCfg();
     saveLlmCfg(Object.assign({}, cur, { baseUrl:data.llmCfg.baseUrl, model:data.llmCfg.model }));
@@ -1535,10 +2722,15 @@ function renderRoster(){
         <div class="nm" data-rename="${r.id}" title="点击重命名" style="cursor:text;">${escapeHtml(r.name)}</div>
         <div class="st">${r.wins}胜 / ${r.survives}存活 / ${r.points}分</div>
       </div>
+      <span class="x" data-code="${r.id}" title="查看代码" style="cursor:pointer;font-size:12px;margin-right:2px;">{ }</span>
       <span class="x" data-del="${r.id}" title="移除">✕</span>
     </div>`).join('') || '<p class="muted">暂无选手，先添加吧～</p>';
   el.querySelectorAll('[data-del]').forEach(b=>{
     b.onclick=()=>removeRoster(b.getAttribute('data-del'));
+  });
+  // 查看代码
+  el.querySelectorAll('[data-code]').forEach(b=>{
+    b.onclick=()=>viewSnakeCode(b.getAttribute('data-code'));
   });
   // 修改颜色
   el.querySelectorAll('[data-color]').forEach(inp=>{
@@ -1549,6 +2741,23 @@ function renderRoster(){
     nm.onclick=()=> renameSnake(nm.getAttribute('data-rename'));
   });
   updateStatLine();
+}
+
+// 查看某条蛇的完整代码（只读弹窗）
+function viewSnakeCode(id){
+  const r=roster.find(x=>x.id===id); if(!r) return;
+  document.getElementById('code-title').textContent='{ } '+r.name+' 的代码';
+  const wr=r.plays?Math.round(100*r.wins/r.plays)+'%':'—';
+  document.getElementById('code-meta').textContent='胜率 '+wr+' · '+r.wins+'胜/'+r.survives+'存活/'+r.points+'分 · 共 '+(r.plays||0)+' 场';
+  const code=r.code||'（该蛇无可读源码）';
+  document.getElementById('code-body').textContent=code;
+  document.getElementById('code-copy').onclick=()=>{
+    navigator.clipboard.writeText(code).then(()=>toast('代码已复制')).catch(()=>{
+      const ta=document.createElement('textarea'); ta.value=code; document.body.appendChild(ta); ta.select();
+      try{document.execCommand('copy');toast('代码已复制');}catch(e){toast('复制失败');} document.body.removeChild(ta);
+    });
+  };
+  document.getElementById('modal-code').classList.add('show');
 }
 
 // 修改某条蛇的颜色（同步刷新所有用到颜色的视图）
@@ -1771,21 +2980,18 @@ function finishSingle(g){
   openSingleReport(res);
 }
 
-/* 积分规则：
-   名次分：第1名 +10，第2 +6，第3 +3，第4 +1
-   存活奖励：活到结束 +5
-   食物分：每个食物 +0.5（四舍五入计入）
+/* 积分规则（赛事标准·纯按名次，无其它加分）：
+   第1名 25 分，第2名 14 分，第3名 4 分，第4名 0 分。
+   并列名次：按该名次的分值累积（例：并列第2名都拿 14 分）。
 */
-const PLACE_PTS=[10,6,3,1,1,1,1,1];
+const PLACE_PTS=[25,14,4,0];
+function placePoints(rank){ return (rank>=1 && rank<=PLACE_PTS.length) ? PLACE_PTS[rank-1] : 0; }
 function applyScores(res){
   res.forEach(r=>{
     const player=roster.find(x=>x.id===r.id);
     if(!player) return;
     player.plays++;
-    let pts = PLACE_PTS[r.rank-1]||1;
-    if(r.alive) pts += 5;
-    pts += Math.round(r.foodEaten*0.5);
-    player.points += pts;
+    player.points += placePoints(r.rank);   // 纯名次分（含并列同分）
     if(r.rank===1) player.wins++;
     if(r.alive) player.survives++;
   });
@@ -2116,21 +3322,52 @@ function validateCode(code, name){
 
 /* ---------- 自动模式：直接调用大模型 API ---------- */
 const LLM_CFG_KEY = 'snake_llm_cfg';
+// 服务商快捷预设：选中后自动填 baseUrl + model（key 仍需用户自填）
+const LLM_PRESETS = {
+  'deepseek':    { baseUrl:'https://api.deepseek.com/v1', model:'deepseek-chat' },
+  'deepseek-r1': { baseUrl:'https://api.deepseek.com/v1', model:'deepseek-reasoner' },
+  'qwen':        { baseUrl:'https://dashscope.aliyuncs.com/compatible-mode/v1', model:'qwen-plus' },
+  'qwen-max':    { baseUrl:'https://dashscope.aliyuncs.com/compatible-mode/v1', model:'qwen-max' },
+  'glm':         { baseUrl:'https://open.bigmodel.cn/api/paas/v4', model:'glm-4-plus' },
+  'kimi':        { baseUrl:'https://api.moonshot.cn/v1', model:'moonshot-v1-8k' },
+  'openai':      { baseUrl:'https://api.openai.com/v1', model:'gpt-4o-mini' },
+  'openai-4o':   { baseUrl:'https://api.openai.com/v1', model:'gpt-4o' },
+  'ollama':      { baseUrl:'http://localhost:11434/v1', model:'qwen2.5-coder' },
+};
+// 根据已存的 baseUrl+model 反查匹配哪个预设（用于打开弹窗时回显下拉）
+function matchPreset(baseUrl, model){
+  for(const k in LLM_PRESETS){
+    if(LLM_PRESETS[k].baseUrl===baseUrl && LLM_PRESETS[k].model===model) return k;
+  }
+  return (baseUrl||model) ? 'custom' : '';
+}
 function loadLlmCfg(){
   try{ return JSON.parse(localStorage.getItem(LLM_CFG_KEY)||'{}'); }catch(e){ return {}; }
 }
 function saveLlmCfg(cfg){
   try{ localStorage.setItem(LLM_CFG_KEY, JSON.stringify(cfg)); }catch(e){}
 }
-// 调用 OpenAI 兼容接口（DeepSeek / 通义 / OpenAI 等）
+// 判断是否本地服务地址（本地 Ollama 等无需 API Key）
+function isLocalEndpoint(url){
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(url||'');
+}
+// 判断配置是否“可用于自动调用”：有 baseUrl，且 (有 Key 或 本地地址)
+function llmReady(cfg){
+  cfg = cfg || loadLlmCfg();
+  if(!cfg.baseUrl) return false;
+  return !!cfg.apiKey || isLocalEndpoint(cfg.baseUrl);
+}
+// 调用 OpenAI 兼容接口（DeepSeek / 通义 / OpenAI / 本地 Ollama 等）
 async function callLLM(prompt){
   const cfg = loadLlmCfg();
-  if(!cfg.apiKey || !cfg.baseUrl){
+  if(!llmReady(cfg)){
     throw new Error('未配置 API，请先在「⚙️ 配置大模型」中填写');
   }
+  const local = isLocalEndpoint(cfg.baseUrl);
+  const key = cfg.apiKey || (local ? 'ollama' : '');   // 本地无 Key 时补占位
   const resp = await fetch(cfg.baseUrl.replace(/\/$/,'') + '/chat/completions', {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+cfg.apiKey },
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+key },
     body: JSON.stringify({
       model: cfg.model || 'deepseek-chat',
       messages:[
@@ -2396,7 +3633,7 @@ function showEvolveModal(snake, summary, prompt){
   document.getElementById('eo-auto').onclick=async ()=>{
     const msg=document.getElementById('eo-msg');
     const cfg=loadLlmCfg();
-    if(!cfg.apiKey || !cfg.baseUrl){
+    if(!llmReady(cfg)){
       msg.innerHTML='⚠️ 尚未配置大模型，无法自动调用。请点顶栏「⚙️ 配置大模型」填写后重试；或用「📋 复制提示词」走手动模式。 <span class="link" id="eo-gocfg">立即配置 →</span>';
       const go=document.getElementById('eo-gocfg');
       if(go) go.onclick=()=>{
@@ -2422,24 +3659,7 @@ function showEvolveModal(snake, summary, prompt){
     const r = (parsed.code) ? parsed : doParse();
     if(!r.code){ msg.textContent='❌ 没解析到可用代码'; return; }
     try{
-      const aiFn=validateCode(r.code, snake.name);
-      // 应用新代码
-      snake.code = r.code;
-      snake.ai = aiFn;
-      snake.diag = newDiag();
-      if(game){ const gs=game.snakes.find(s=>s.id===snake.id); if(gs) gs.color=snake.color; }
-      renderRoster(); renderSelectList();
-      persistRoster();   // 进化后的代码持久化到本地，刷新不丢失
-      poolNewGeneration(snake.name);   // 数据池为该蛇开启新一代，便于对比进化前后
-      // 存档经验到本地库
-      addLessonRecord({
-        time: new Date().toLocaleString('zh-CN'),
-        snake: snake.name,
-        beforeWinRate: summary.winRate,
-        beforeDeath: summary.deathBreak,
-        advice: r.advice,
-        lessons: r.lessons,
-      });
+      applyEvolution(snake, r, summary);   // 热替换+存经验（与自动训练循环共用）
       msg.textContent='✅ 已进化并存档经验，重新跑批量赛验证效果';
       toast('✅ '+snake.name+' 已进化，经验已存档');
       setTimeout(()=> wrap.classList.remove('show'), 900);
@@ -2447,9 +3667,58 @@ function showEvolveModal(snake, summary, prompt){
   };
 }
 
+/* ============================================================
+   applyEvolution：把"改进代码+经验"应用到一条蛇（纯函数）
+   供进化弹窗(手动)与自动训练循环共用。失败抛错由调用方处理。
+   parsed={advice,lessons,code}; summary={winRate,deathBreak,...}
+   ============================================================ */
+function applyEvolution(snake, parsed, summary){
+  const aiFn = validateCode(parsed.code, snake.name);   // 编译+试跑5步，失败抛错
+  snake.code = parsed.code;
+  snake.ai = aiFn;
+  snake.diag = newDiag();
+  if(game){ const gs=game.snakes.find(s=>s.id===snake.id); if(gs) gs.color=snake.color; }
+  renderRoster(); renderSelectList();
+  persistRoster();
+  poolNewGeneration(snake.name);
+  addLessonRecord({
+    time: new Date().toLocaleString('zh-CN'),
+    snake: snake.name,
+    beforeWinRate: (summary&&summary.winRate)||'-',
+    beforeDeath: (summary&&summary.deathBreak)||{},
+    advice: parsed.advice,
+    lessons: parsed.lessons,
+  });
+  return aiFn;
+}
+
 /* ---------- 元规律：把全部历史经验交给 LLM 二次提炼 ---------- */
 const META_KEY = 'snake_meta_rules';
-function loadMeta(){ try{ return JSON.parse(localStorage.getItem(META_KEY)||'null'); }catch(e){ return null; } }
+// 内置默认元规律种子：经实测验证的进化方法论，注入每次进化/造蛇 prompt，引导 LLM 走对路。
+// 用户后续提炼的元规律会覆盖它，但这套"训练方法论"会始终作为底座保留（见 loadMeta 合并）。
+const SEED_META = {
+  text:
+`【进化方法论·经实测验证，务必遵循】
+1. 优先做"对路的小改"，而非堆砌复杂大招：实测表明，给 G1 加残局封锁/对手威胁扩散图等重型机制，在多蛇混战中反而更弱（复杂度≠强度）；而针对具体对局形态做的小幅策略增量（如为 1v1 加入"占领中心控场""更长时镜像逼抢"）才真正带来稳定提升。
+2. 改动要"针对训练环境的形态"：4 蛇混战与 1v1 单挑的最优策略不同。若想克制某个强敌，让蛇专门与它反复单挑来进化，更易逼出针对性强策略（实测 G1 专打 Siege 后，单挑胜率 48.5%→54%，且混战也变强）。
+3. 任何"提升"必须经大样本复核才算数：小样本（<150场）的胜率波动极大，会把纯运气误判为进步（实测某变种 120 场显示 57%，扩到 260 场跌回 44%）。判定是否更强，至少 200 场起，且看是否在"目标对手单挑"和"多蛇混战"两个场景都不退化。
+4. 只升不降：新版必须在回测中不弱于旧版才可替换；任何一个场景退化就应回滚，宁可不改也不要让蛇变差。
+5. 通用生存底座不可丢：无论怎么改，flood-fill 安全空间评估（落点后逃生空间 >= 自身长度）、避毒、头碰头规避这三条是底线，是历代最高频死因的根治手段。
+6. 鲁棒性·不赌食物比例：包子/蟠桃/毒蜘蛛的刷新比例会变化。务必【按食物类型的实际价值×当前血量×安全距离动态决策】，而不是写死"优先吃桃/优先吃包子"这类对某一比例的假设。实测表明：静态打分函数难以同时兼顾所有比例（抢食权重高→食物多时强、少时崩；调低则相反），手工调参有天花板。要真正鲁棒，应让蛇【运行时感知当前食物密度/类型分布，动态切换"积极抢食 vs 保守苟活"】；并用"最差比例胜率(minimax)"而非平均胜率来判定是否变强——只有最坏情况也不退化才算成功。
+7. 鲁棒性·双信号(且需进一步细分)：单条线性自适应(aggr=a·密度−b·毒)不够。实测发现要拆成两个正交信号——【食物密度】决定"该不该抢"，【局部拥挤度=自身周围数格内的对手身体数】决定"抢时多避碰"(蟠桃盛宴危险源于食物多→蛇聚集→碰撞，而非食物多本身)。双信号可修好"蟠桃盛宴/全是包子"短板，但会牺牲"高危少食"——因为强避碰在"毒多+食少"时让蛇过度保守、抢不到稀缺食物。深层结论：拥挤度还需【细分来源】(拥挤是因食物聚集→该避碰；还是因毒堆/边角→应照常抢)，即第三信号。手工调参在此到达天花板，建议交由大模型设计多信号决策或显式状态机。
+8. 死因要看"环境约束"而非只看"决策"：实测多蛇混战中"体力耗尽/饿死"高占比(如68%)，逐局追踪发现死时地图上几乎都【已无可吃食物】——食物是限量生成的零和资源，被对手抢光后剩者必饿死。这类死亡【不是蛇保守】，再优化觅食/空间预算也无效(因为吃不到不存在的食物)。诊断时务必先区分：饿死是"有食物没去抢"(可优化BFS抢食) 还是"压根没食物"(只能靠抢食速度竞赛比对手早一步，或属引擎食物生成节奏的固有约束)。优化前先验证瓶颈真伪，别把环境约束误判为策略缺陷而白调参。`,
+  time: '内置种子（2026-06-15 实测沉淀）',
+  count: 0,
+  _seed: true,
+};
+function loadMeta(){
+  let user=null;
+  try{ user = JSON.parse(localStorage.getItem(META_KEY)||'null'); }catch(e){ user=null; }
+  if(!user || !user.text || !user.text.trim()) return SEED_META;   // 无用户元规律 → 用内置种子
+  // 有用户元规律：把内置方法论作为底座拼在前面，保证进化 prompt 始终带上它
+  if(user.text.indexOf('进化方法论·经实测验证')>=0) return user;     // 已含种子（用户编辑过的完整版）
+  return { text: SEED_META.text + '\n\n【本平台沉淀的元规律】\n' + user.text, time:user.time, count:user.count };
+}
 function saveMeta(obj){ try{ localStorage.setItem(META_KEY, JSON.stringify(obj)); }catch(e){} }
 
 // 把所有历史经验拼成"二次提炼"的 prompt
@@ -2601,7 +3870,7 @@ function showSynthesizeModal(prompt, count){
   document.getElementById('syn-auto').onclick=async ()=>{
     const msg=document.getElementById('syn-msg');
     const cfg=loadLlmCfg();
-    if(!cfg.apiKey || !cfg.baseUrl){
+    if(!llmReady(cfg)){
       msg.innerHTML='⚠️ 尚未配置大模型。请点顶栏「⚙️ 配置大模型」填写后重试，或用「📋 复制提示词」走手动模式。';
       return;
     }
@@ -2932,11 +4201,74 @@ const RULES_HTML=`
     <li>🍑 <b>蟠桃</b>：长度 +3，HP 恢复至 100。</li>
     <li>🕷️ <b>毒蜘蛛</b>：长度 +1，HP <b>-60</b>。</li>
   </ul>
-  <h3>🏆 积分规则</h3>
+  <h3>🏆 积分与排名规则</h3>
   <ul>
-    <li>名次分：第1名 +10、第2 +6、第3 +3、第4 +1。</li>
-    <li>存活到结束额外 +5；每吃 1 个食物 +0.5。</li>
+    <li>4 蛇同场竞技，按积分排名，积分榜<b>前 10 名晋级</b>。</li>
+    <li>当场上<b>仅剩 1 条蛇存活时比赛结束</b>，该蛇为第 1 名。</li>
+    <li>其余蛇<b>按死亡顺序从后到先</b>依次为 1、2、3、4 名（越晚死名次越高）。</li>
+    <li>名次分：<b>第1名 25 分、第2名 14 分、第3名 4 分、第4名 0 分</b>（纯按名次，无其它加分）。</li>
+    <li><b>同回合死亡</b>：按长度排名，长者名次更高；长度也相同则<b>并列同名次</b>。</li>
+    <li><b>同时相撞死亡</b>：并列同名次、积分相同（如第2、3名相撞同死，则两条并列第2名，各得 14 分）。</li>
   </ul>
+`;
+
+// 📜 策略宝典：经上千场实测沉淀的最优策略清单（与平台内置元规律一致）
+const GUIDE_HTML=`
+  <p class="muted" style="line-height:1.7;margin-bottom:10px;">
+    本宝典是基于本平台 <b>10+ 次进化实验、上千场对局</b> 沉淀的可复用策略清单。每一条都有实测数据支撑，
+    并已写入<b>自动训练的元规律种子</b>（接大模型训练时会自动注入提示词，引导它走对路）。
+  </p>
+
+  <h3>🛡️ 第一层 · 保命（地基，优先级最高）</h3>
+  <ul>
+    <li><b>尾连通刚性校验</b> ⭐：模拟移动后用 BFS 验证"蛇头还能否回到自己尾巴"，<b>从数学上根除自困/自撞</b>。比单纯的空间估算更严谨。</li>
+    <li><b>flood-fill 逃生空间评估</b>：落点后的可达空间必须 <b>≥ 自身长度</b>，否则会被自己困死。这是历代最高频死因之一的根治手段。</li>
+    <li><b>空间惩罚用"梯度"而非"开关"</b>：用 <code>-(身长-空间)×系数</code> 连续梯度，比"低于阈值才重罚"更平滑，在"够安全"与"敢进取"间取得平衡。</li>
+    <li><b>避毒</b>：毒蜘蛛 (-60HP) 几乎绝不踩，仅濒死且极度饥渴才赌。</li>
+  </ul>
+
+  <h3>⚔️ 第二层 · 对抗（决定中盘生死）</h3>
+  <ul>
+    <li><b>头碰头双级预测</b>：对手蛇头下一步只有 3 个可能方向（不会反向）。把"比我长/等长"标为<b>硬危险</b>（重罚），"比我短"标为<b>软危险</b>（也躲，因对手可能转向）。实测把头碰头死亡从 24% 压到 16%。</li>
+    <li><b>残局空间博弈（Siege 式）</b>：1v1 时用 BFS 计算"我落子后对手的可达空间"，主动<b>压缩它</b>——这是混战之王 Siege 的杀招，也是 1v1 制胜关键。</li>
+    <li><b>中心控场 + 镜像逼抢</b>：控制地图中心提高机动性；当自己更长时主动贴近对手施压，把它往边角挤。</li>
+  </ul>
+
+  <h3>🍽️ 第三层 · 觅食（决定能否活到后期）</h3>
+  <ul>
+    <li><b>BFS 真实路径找食</b>，而非曼哈顿直线——路被堵时不瞎冲。</li>
+    <li><b>按食物类型价值决策，不赌比例</b>：🍑蟠桃(满血+3长) &gt; 🥟包子(+40HP+1长) &gt; 🕷️毒。按"价值 × 当前血量 × 安全距离"动态算，<b>绝不写死"优先吃桃"</b>——因为食物刷新比例会变。</li>
+    <li><b>低血提前急食</b>：HP 阈值要早（如 &lt;55 就开始觅食），别等饿死才找食。</li>
+  </ul>
+
+  <h3>🧠 第四层 · 自适应（决定上限，最难）</h3>
+  <ul>
+    <li><b>双信号自适应</b>：<code>食物密度</code>决定"该不该抢" + <code>局部拥挤度</code>决定"抢时多避碰"。两个正交信号比单条线性公式强。</li>
+    <li><b>按对手数量切人格</b>：蛇少→激进控场（像 Ω 本体，1v1 强）；蛇多→保守避战（像 FSM/Siege，混战稳）。</li>
+  </ul>
+
+  <h3>🧭 元规律（贯穿全局 · 反直觉但真实 · 用失败案例换来的）</h3>
+  <ul>
+    <li><b>1. 复杂 ≠ 强</b>：堆"残局封锁+威胁扩散图"等重型大招，混战里反而更弱（G2/G3/Hybrid 全部失败）。<b>对路的小改 &gt; 通用的大招</b>。</li>
+    <li><b>2. 小样本会骗人</b>：某变种 120 场显示 57%，扩到 260 场跌回 44%。判定强弱<b>至少 200 场</b>，且要在"目标对手单挑"和"多蛇混战"两个场景都不退化。</li>
+    <li><b>3. 只升不降</b>：新版任一场景退化就回滚，宁可不改也别让蛇变差。</li>
+    <li><b>4. 静态打分有天花板</b>：单一固定权重无法兼顾所有食物比例（抢食权重高→食物多时强少时崩，反之亦然），手调到极限就该上"运行时自适应"。</li>
+    <li><b>5. 死因要分清"决策问题"还是"环境约束"</b>：实测混战 68% 的"饿死"其实是"地图食物被抢光了"（零和资源耗尽），这是引擎约束，<b>再优化觅食也没用</b>。诊断前先验证瓶颈真伪。</li>
+  </ul>
+
+  <h3>🏅 内置蛇选型速查</h3>
+  <ul>
+    <li><b>想要混战最强</b> → 🎯围猎Siege / 🤖状态机FSM（混战之王，且几乎免调参）。</li>
+    <li><b>想要 1v1 / 定向克制</b> → 👑集大成Ω（单挑最强，PM 参数可定向微调）。</li>
+    <li><b>兼顾两者（按场上蛇数变身）</b> → 🦎变形Ω。</li>
+    <li><b>新版集大成</b> → 🐉天选Ω+（融合全部保命/对抗/觅食/自适应最优组合，见下文）。</li>
+  </ul>
+
+  <p style="margin-top:12px;padding:10px;background:var(--panel2);border-radius:8px;line-height:1.7;">
+    <b>一句话最优配方</b>：保命（尾连通+flood-fill+避毒）做地基 → 头碰头双级预测保中盘 →
+    BFS 按价值觅食保续航 → 双信号/按蛇数切人格冲上限；并始终用"<b>大样本 + 只升不降</b>"验证，
+    警惕"复杂≠强"和"环境约束误判"。
+  </p>
 `;
 
 const SPEC_HTML=`
@@ -3070,12 +4402,103 @@ function bindEvents(){
   // modals
   document.getElementById('rules-content').innerHTML=RULES_HTML;
   document.getElementById('spec-content').innerHTML=SPEC_HTML;
+  document.getElementById('guide-content').innerHTML=GUIDE_HTML;
   document.getElementById('btn-rules').onclick=()=>document.getElementById('modal-rules').classList.add('show');
+  document.getElementById('btn-guide').onclick=()=>document.getElementById('modal-guide').classList.add('show');
   document.getElementById('btn-spec').onclick=()=>document.getElementById('modal-spec').classList.add('show');
   // 经验库
   document.getElementById('btn-lesson').onclick=openLessonBook;
   // 数据分析
   document.getElementById('btn-analysis').onclick=openAnalysis;
+  // 归档库
+  document.getElementById('btn-archive').onclick=openArchive;
+  document.getElementById('archive-clear').onclick=clearArchive;
+  // 鲁棒性测试
+  document.getElementById('btn-robust').onclick=openRobust;
+  document.getElementById('robust-start').onclick=runRobustTest;
+  document.getElementById('robust-stop').onclick=()=>{ robustAbort=true; };
+  document.getElementById('robust-mode').onchange=syncRobustModeUI;
+  // 自动训练
+  document.getElementById('btn-auto-train').onclick=openAutoTrain;
+  // ⚡ 极速测试预设：最小参数，无大模型也能秒跑完整流程
+  document.getElementById('at-quick').onclick=()=>{
+    document.getElementById('at-big').value=1;        // 大循环 1 轮
+    document.getElementById('at-micro').value=1;      // 小循环 1 次
+    document.getElementById('at-meta').value=0;       // 不总结元规律（省一次 AI 调用）
+    document.getElementById('at-converge').checked=true;
+    document.getElementById('at-matches').value=6;    // 每次批量赛仅 6 场，极快
+    document.getElementById('at-improve').value=1;    // 只提升最差 1 条
+    document.getElementById('at-rollback-n').value=4; // 回测场数也压小
+    document.getElementById('at-rollback').checked=true;
+    document.getElementById('at-keep').value='all';   // 测试时全部保留，结果更直观
+    document.getElementById('at-topk-row').style.display='none';
+    document.getElementById('at-elite-row').style.display='none';
+    toast('⚡ 已填入极速测试参数：1×1×6场，运行中弹窗点「跳过本步」即可');
+  };
+  // 保留策略：动态显隐对应输入框
+  document.getElementById('at-keep').onchange=function(){
+    const v=this.value;
+    document.getElementById('at-topk-row').style.display  = v==='topk' ? '' : 'none';
+    document.getElementById('at-elite-row').style.display = (v==='elite'||v==='elite-archive') ? '' : 'none';
+  };
+  // 参赛蛇列表的快捷按钮
+  document.getElementById('at-sel-all').onclick=()=>{ document.querySelectorAll('.at-sel').forEach(c=>c.checked=true); updateTrainSelCount(); };
+  document.getElementById('at-sel-none').onclick=()=>{ document.querySelectorAll('.at-sel').forEach(c=>c.checked=false); updateTrainSelCount(); };
+  document.getElementById('at-sel-sync').onclick=()=>{
+    const right=new Set(getSelectedIds());
+    if(!right.size){ toast('右侧未勾选任何蛇'); return; }
+    document.querySelectorAll('.at-sel').forEach(c=>c.checked=right.has(c.value));
+    updateTrainSelCount();
+    toast('已同步右侧勾选的 '+right.size+' 条');
+  };
+  document.getElementById('at-start').onclick=()=>{
+    let ids=getTrainSelectedIds();   // 用训练面板内的勾选
+    if(ids.length<2){ toast('请在「参赛蛇」里至少勾选 2 条'); return; }
+    autoState.lastIds = ids.slice();  // 记住本次选择，下次打开默认沿用
+    const cfg={
+      bigRounds: parseInt(document.getElementById('at-big').value)||3,        // 外层大循环轮数
+      microMax:  parseInt(document.getElementById('at-micro').value)||4,       // 中层小循环上限 K
+      metaEvery: Math.max(0, parseInt(document.getElementById('at-meta').value)||0), // 每 L 次小循环总结
+      converge:  document.getElementById('at-converge').checked,              // 收敛即停
+      matches:   parseInt(document.getElementById('at-matches').value)||30,    // 内层每次批量赛场数
+      improveN:  parseInt(document.getElementById('at-improve').value)||2,     // 每次提升最差 N 条
+      rollbackSamples: parseInt(document.getElementById('at-rollback-n').value)||10,
+      rollback:  document.getElementById('at-rollback').checked,
+      randFood:  document.getElementById('at-randfood').checked,               // 批量赛随机比例(域随机化)
+      robustEval:document.getElementById('at-robusteval').checked,             // 多比例最差情况回测
+      keepPolicy: document.getElementById('at-keep').value,                    // elite-archive | elite | topk | all
+      topK:      parseInt(document.getElementById('at-topk').value)||3,        // 仅 topk 用
+      eliteSize: parseInt(document.getElementById('at-elite-size').value)||4,  // 精英种群规模
+      eliminate: (function(v){ return v==='elite'||v==='elite-archive'; })(document.getElementById('at-keep').value), // 这两档每代淘汰
+      archiveElim: document.getElementById('at-keep').value==='elite-archive', // 淘汰时是否归档
+      maxTurns:  parseInt(document.getElementById('max-turns').value)||DEFAULT_MAX_TURNS,
+      ids: ids.slice(),
+    };
+    runAutoTrain(cfg);
+  };
+  document.getElementById('at-pause').onclick=()=>{
+    autoState.paused=true; setAutoStatus('⏸ 已暂停');
+    document.getElementById('at-pause').style.display='none';
+    document.getElementById('at-resume').style.display='';
+  };
+  document.getElementById('at-resume').onclick=()=>{
+    autoState.paused=false; setAutoStatus('运行中…');
+    document.getElementById('at-pause').style.display='';
+    document.getElementById('at-resume').style.display='none';
+    if(autoState.resolvePause){ const r=autoState.resolvePause; autoState.resolvePause=null; r(); }
+  };
+  document.getElementById('at-abort').onclick=()=>{
+    autoState.abort=true; autoState.paused=false;
+    setAutoStatus('正在中止…');
+    // 1) 唤醒 checkPause 的等待
+    if(autoState.resolvePause){ const r=autoState.resolvePause; autoState.resolvePause=null; r(); }
+    // 2) 关掉手动回填弹窗并 resolve，否则会卡在 await showManualModal 出不来
+    if(autoState.resolveManual){ const f=autoState.resolveManual; autoState.resolveManual=null; f(''); }
+    // 3) 兜底：直接隐藏弹窗
+    const mm=document.getElementById('modal-manual'); if(mm) mm.classList.remove('show');
+  };
+  document.getElementById('at-export').onclick=exportTrainHistory;
+  document.getElementById('at-back').onclick=showAutoCfgView;
   // 重置擂台
   document.getElementById('btn-reset-roster').onclick=resetRoster;
   // 导出 / 导入全部存档
@@ -3088,18 +4511,35 @@ function bindEvents(){
   // 大模型配置
   document.getElementById('btn-llm-cfg').onclick=()=>{
     const cfg=loadLlmCfg();
-    document.getElementById('cfg-baseurl').value=cfg.baseUrl||'https://api.deepseek.com/v1';
-    document.getElementById('cfg-model').value=cfg.model||'deepseek-chat';
+    const base=cfg.baseUrl||'https://api.deepseek.com/v1';
+    const model=cfg.model||'deepseek-chat';
+    document.getElementById('cfg-baseurl').value=base;
+    document.getElementById('cfg-model').value=model;
     document.getElementById('cfg-apikey').value=cfg.apiKey||'';
+    document.getElementById('cfg-preset').value=matchPreset(cfg.baseUrl||'', cfg.model||'');  // 回显预设
     document.getElementById('modal-llm').classList.add('show');
   };
+  // 选服务商预设 → 自动填地址和模型（custom/空则不动，让用户手填）
+  document.getElementById('cfg-preset').onchange=function(){
+    const p=LLM_PRESETS[this.value];
+    if(p){
+      document.getElementById('cfg-baseurl').value=p.baseUrl;
+      document.getElementById('cfg-model').value=p.model;
+      const hint=document.getElementById('cfg-preset-hint');
+      if(hint){
+        const need = this.value==='ollama' ? '本地 Ollama 无需 Key（随便填或留默认），但需先启动服务并允许跨域。'
+          : '已自动填好地址和模型，请到对应平台官网申请 API Key 填到下方。';
+        hint.innerHTML='✅ 已套用「'+this.options[this.selectedIndex].text.split('·')[0].trim()+'」预设。'+need;
+      }
+    }
+  };
   document.getElementById('cfg-save').onclick=()=>{
-    saveLlmCfg({
-      baseUrl: document.getElementById('cfg-baseurl').value.trim(),
-      model: document.getElementById('cfg-model').value.trim(),
-      apiKey: document.getElementById('cfg-apikey').value.trim(),
-    });
-    toast('✅ 配置已保存（仅本浏览器）');
+    const baseUrl=document.getElementById('cfg-baseurl').value.trim();
+    let apiKey=document.getElementById('cfg-apikey').value.trim();
+    // 本地服务（Ollama 等）无需真 Key：留空则自动补占位，避免被判“未配置”
+    if(!apiKey && isLocalEndpoint(baseUrl)) apiKey='ollama';
+    saveLlmCfg({ baseUrl, model: document.getElementById('cfg-model').value.trim(), apiKey });
+    toast(isLocalEndpoint(baseUrl)?'✅ 本地模型配置已保存（无需 Key）':'✅ 配置已保存（仅本浏览器）');
     document.getElementById('modal-llm').classList.remove('show');
   };
   document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{
@@ -3108,8 +4548,734 @@ function bindEvents(){
   document.querySelectorAll('.modal-mask').forEach(m=>m.onclick=(e)=>{ if(e.target===m) m.classList.remove('show'); });
 }
 
+/* ============================================================
+   14. 全自动训练飞轮
+   三层嵌套：
+   ┌ 大循环 × bigRounds
+   │  ┌ 小循环 × microMax（同批打磨，收敛即停）
+   │  │   · 批量赛(matches场) → 提升最差N条(含回滚) → 每L次总结元规律
+   │  └ 小循环结束：种群阶段性收敛
+   └ 大循环末尾：LLM创造1条 + 杂交1条新蛇 → 加X淘X(留种) → 下一大轮
+   ============================================================ */
+const TRAIN_KEY = 'snake_train_history_v1';
+let autoState = { running:false, paused:false, abort:false, round:0, cfg:null, history:[], resolvePause:null, resolveManual:null, evoLog:[] };
+
+// 记录一条进化结果并刷新汇总视图
+// status: 'applied' 生效 | 'rollback' 回滚 | 'newsnake' 新蛇 | 'skip' 跳过/失败
+function recordEvo(entry){
+  autoState.evoLog = autoState.evoLog || [];
+  autoState.evoLog.push(Object.assign({ big:autoState.big, micro:autoState.micro }, entry));
+  renderEvoLog();
+}
+function renderEvoLog(){
+  const box=document.getElementById('auto-evolog'); if(!box) return;
+  const log=autoState.evoLog||[];
+  if(!log.length){ box.innerHTML='<span class="muted" style="font-size:11px;">本次训练里被进化的蛇会列在这里（进化前后胜率、生效/回滚）。</span>'; const st=document.getElementById('evolog-stat'); if(st) st.textContent=''; return; }
+  const ICON={ applied:'✅', rollback:'↩️', newsnake:'🐣', skip:'↷' };
+  const TXT={ applied:'生效', rollback:'回滚', newsnake:'新蛇', skip:'跳过' };
+  const COL={ applied:'var(--green)', rollback:'var(--red)', newsnake:'var(--accent2)', skip:'var(--muted)' };
+  let rows='';
+  log.slice().reverse().forEach(e=>{
+    const tag='<span style="color:'+(COL[e.status]||'var(--muted)')+';">'+(ICON[e.status]||'•')+' '+(TXT[e.status]||e.status)+'</span>';
+    const loc='<span class="muted" style="font-size:10px;">'+(e.big||'-')+'.'+(e.micro||'-')+'</span>';
+    let rate='';
+    if(e.status==='applied'||e.status==='rollback'){
+      const b=(e.before!=null?e.before.toFixed(0):'?'), a=(e.after!=null?e.after.toFixed(0):'?');
+      const d=(e.before!=null&&e.after!=null)?(e.after-e.before):null;
+      const dStr=d!=null?(' ('+(d>=0?'+':'')+d.toFixed(0)+')'):'';
+      const dCol=d!=null?(d>0?'var(--green)':(d<0?'var(--red)':'var(--muted)')):'var(--muted)';
+      rate='<span class="muted">'+b+'% → '+a+'%</span><span style="color:'+dCol+';">'+dStr+'</span>';
+    }else if(e.note){ rate='<span class="muted" style="font-size:11px;">'+e.note+'</span>'; }
+    rows+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);">'
+      +loc+'<b style="font-size:12px;min-width:90px;">'+e.name+'</b>'+tag+'<span style="margin-left:auto;">'+rate+'</span></div>';
+  });
+  box.innerHTML=rows;
+  // 统计
+  const c={ applied:0, rollback:0, newsnake:0, skip:0 };
+  log.forEach(e=>{ if(c[e.status]!=null) c[e.status]++; });
+  const st=document.getElementById('evolog-stat');
+  if(st) st.textContent='共 '+log.length+' 次：生效 '+c.applied+' · 回滚 '+c.rollback+' · 新蛇 '+c.newsnake+(c.skip?(' · 跳过 '+c.skip):'');
+}
+
+function logAuto(t){
+  const el=document.getElementById('auto-log');
+  if(!el) return;
+  const d=document.createElement('div');
+  d.textContent='['+new Date().toLocaleTimeString('zh-CN')+'] '+t;
+  el.appendChild(d);
+  el.scrollTop=el.scrollHeight;
+}
+function setAutoStatus(t){ const el=document.getElementById('auto-status'); if(el) el.textContent=t; }
+
+// 暂停检查：paused 时挂起，等「继续」按钮 resolve
+async function checkPause(){
+  while(autoState.paused && !autoState.abort){
+    await new Promise(r=>{ autoState.resolvePause=r; });
+  }
+}
+
+// 统一 LLM 入口：有 API 自动调用；否则暂停弹窗等手动回填
+async function askLLM(prompt, title){
+  const cfg=loadLlmCfg();
+  if(llmReady(cfg)){
+    try{ return await callLLM(prompt); }
+    catch(e){ logAuto('⚠️ API 调用失败转手动：'+e.message); }
+  }
+  if(autoState.abort) return '';   // 已中止则不再弹窗
+  autoState.paused=true;
+  setAutoStatus('⏸ 等待手动回填：'+title);
+  logAuto('✋ 需手动调用大模型：'+title+'（已暂停，请在弹窗中复制提示词→回填，或点中止退出）');
+  const txt = await new Promise(res=>{ showManualModal(title, prompt, res); });
+  autoState.paused=false;
+  if(!autoState.abort) setAutoStatus('运行中…');
+  if(autoState.resolvePause){ const r=autoState.resolvePause; autoState.resolvePause=null; r(); }
+  return txt;
+}
+
+// 无可视化批量赛：跑 rounds 场，计入积分/诊断/数据池，返回各参赛蛇本轮快照
+// randomizeFood=true 时每场随机抽极端比例（域随机化）
+async function runBatchHeadless(ids, rounds, maxTurns, randomizeFood){
+  const fwFixed=getFoodWeights();
+  // 本轮诊断清零（只统计参赛蛇）
+  ids.forEach(id=>{ const p=roster.find(x=>x.id===id); if(p) p.diag=newDiag(); });
+  const wins={}, plays={};
+  ids.forEach(id=>{ wins[id]=0; plays[id]=0; });
+  for(let i=0;i<rounds;i++){
+    if(autoState.abort) break;
+    await checkPause();
+    const fw = randomizeFood ? randomFoodWeights() : fwFixed;
+    const g=new SnakeGame(buildPlayers(ids), {maxTurns, seed:(Math.random()*1e9)|0, foodWeights:fw});
+    let guard=0;
+    while(!g.gameOver && guard<maxTurns+5){ g.step(); guard++; }
+    const res=g.result();
+    applyScores(res); collectDiag(res); poolRecord(res);
+    res.forEach(r=>{ if(r.id in plays){ plays[r.id]++; if(r.rank===1) wins[r.id]++; } });
+    if(i%5===0){ await new Promise(r=>setTimeout(r,0)); }
+  }
+  renderRankboard(); renderRoster(); renderSelectList();
+  // 快照：各蛇本轮胜率
+  const snap={};
+  ids.forEach(id=>{ snap[id] = plays[id]? (100*wins[id]/plays[id]) : 0; });
+  return snap;
+}
+
+// 跑一条蛇 vs 固定基准陪练的小样本，返回该蛇胜率%（用于回滚校验）
+// fw 不传则用当前比例；传则用指定比例（多比例回测时逐个传入）
+function quickWinRate(snakeId, samples, maxTurns, fw){
+  const baseline = strongestBuiltin();
+  const ids=[snakeId];
+  if(baseline && baseline.id!==snakeId) ids.push(baseline.id);
+  else {
+    roster.filter(r=>['贪心猎手','稳健生存','随机漫步'].includes(r.name)).slice(0,2).forEach(r=>ids.push(r.id));
+  }
+  if(ids.length<2) return null;
+  const weights = fw || getFoodWeights();
+  let win=0, n=0;
+  for(let i=0;i<samples;i++){
+    const g=new SnakeGame(buildPlayers(ids), {maxTurns, seed:(Math.random()*1e9)|0, foodWeights:weights});
+    let guard=0; while(!g.gameOver && guard<maxTurns+5){ g.step(); guard++; }
+    const r=g.result().find(z=>z.id===snakeId);
+    n++; if(r && r.rank===1) win++;
+  }
+  return n? 100*win/n : null;
+}
+// 多比例"最差情况"回测：在 ROBUST_SCENARIOS 各比例下各跑 samplesEach 场，返回最低胜率%
+function worstCaseWinRate(snakeId, samplesEach, maxTurns){
+  let worst=null;
+  for(const sc of ROBUST_SCENARIOS){
+    const r=quickWinRate(snakeId, samplesEach, maxTurns, sc.w);
+    if(r==null) continue;
+    if(worst==null || r<worst) worst=r;
+  }
+  return worst;
+}
+
+/* ---------- 鲁棒性测试面板 ---------- */
+let robustBusy=false, robustAbort=false;
+// 填充 3 个固定陪练下拉(默认优先选最强的内置蛇)
+function fillRobustFoeSelects(){
+  const sels=['robust-foe1','robust-foe2','robust-foe3'].map(id=>document.getElementById(id));
+  if(!sels[0]) return;
+  // 默认偏好顺序：围猎Siege/状态机FSM/猎手Pro+，找不到就按胜率取前几
+  const prefer=['围猎','状态机','FSM','Siege','猎手Pro'];
+  const opts=roster.map(r=>'<option value="'+r.id+'">'+escapeHtml(r.name)+'</option>').join('');
+  // 计算默认三条
+  const pick=[];
+  prefer.forEach(kw=>{ const r=roster.find(x=>x.name.indexOf(kw)>=0 && !pick.includes(x.id)); if(r&&pick.length<3)pick.push(r.id); });
+  roster.slice().sort((a,b)=>{const wa=a.plays?a.wins/a.plays:0,wb=b.plays?b.wins/b.plays:0;return wb-wa;}).forEach(r=>{ if(pick.length<3&&!pick.includes(r.id))pick.push(r.id); });
+  sels.forEach((sel,i)=>{ sel.innerHTML=opts; if(pick[i]) sel.value=pick[i]; });
+}
+function openRobust(){ fillRobustFoeSelects(); syncRobustModeUI(); document.getElementById('modal-robust').classList.add('show'); }
+function syncRobustModeUI(){
+  const mode=document.getElementById('robust-mode').value;
+  document.getElementById('robust-foes-row').style.display = mode==='fixed' ? '' : 'none';
+}
+async function runRobustTest(){
+  if(robustBusy) return;
+  const mode=document.getElementById('robust-mode').value;
+  // 被测蛇：右侧勾选(未勾用全部)
+  let ids=getSelectedIds();
+  if(ids.length<2 && mode==='selected'){ ids=roster.map(r=>r.id); }
+  if(ids.length<1) ids=roster.map(r=>r.id);
+  // 固定陪练 3 条
+  let foeIds=[];
+  if(mode==='fixed'){
+    foeIds=['robust-foe1','robust-foe2','robust-foe3'].map(id=>document.getElementById(id).value);
+    if(new Set(foeIds).size<3){ toast('请选择 3 条不同的固定陪练'); return; }
+    if(foeIds.some(f=>!roster.find(r=>r.id===f))){ toast('陪练蛇不存在'); return; }
+  }else{
+    if(ids.length<2){ toast('同场混战模式至少需要 2 条蛇'); return; }
+  }
+  const N=parseInt(document.getElementById('robust-n').value)||30;
+  // 用独立的回合上限(默认200)，不再沿用页面 max-turns(默认1000) —— 否则带 minimax 的强蛇会跑满千回合极慢
+  const maxTurns=parseInt(document.getElementById('robust-maxturns').value)||200;
+  const statusEl=document.getElementById('robust-status');
+  robustAbort=false;
+  robustBusy=true;
+  document.getElementById('robust-start').disabled=true;
+  const stopBtn=document.getElementById('robust-stop'); if(stopBtn) stopBtn.style.display='';
+  const rate=ROBUST_SCENARIOS.map(()=>({}));
+  // 总场数(用于进度) & 计时
+  const totalGames = ROBUST_SCENARIOS.length * (mode==='fixed'? ids.length : 1) * N;
+  let doneGames=0; const t0=Date.now();
+  const tick=async(label)=>{
+    const pct=Math.round(100*doneGames/totalGames);
+    const sec=((Date.now()-t0)/1000).toFixed(0);
+    statusEl.textContent=label+' '+pct+'%（'+doneGames+'/'+totalGames+'场, 已用'+sec+'s）';
+    await new Promise(r=>setTimeout(r,0));   // 每场都让渡，UI 不卡
+  };
+  try{
+    for(let si=0; si<ROBUST_SCENARIOS.length && !robustAbort; si++){
+      const sc=ROBUST_SCENARIOS[si];
+      if(mode==='fixed'){
+        // 对照陪练：每条被测蛇分别 vs 3 固定对手，单独凑 4 蛇混战
+        for(const tid of ids){
+          if(robustAbort) break;
+          let win=0, play=0;
+          const lineup=[tid].concat(foeIds.filter(f=>f!==tid));
+          for(let i=0;i<N && !robustAbort;i++){
+            const g=new SnakeGame(buildPlayers(lineup), {maxTurns, seed:(Math.random()*1e9)|0, foodWeights:sc.w});
+            let guard=0; while(!g.gameOver && guard<maxTurns+5){ g.step(); guard++; }
+            const champ=g.result().find(r=>r.rank===1);
+            play++; if(champ && champ.id===tid) win++;
+            doneGames++;
+            await tick('测试「'+sc.name+'」');   // 每场让渡 + 刷新进度
+          }
+          rate[si][tid]= play? 100*win/play : 0;
+        }
+      }else{
+        // 同场混战：勾选蛇互相打
+        const wins={}, plays={}; ids.forEach(id=>{wins[id]=0;plays[id]=0;});
+        for(let i=0;i<N && !robustAbort;i++){
+          const g=new SnakeGame(buildPlayers(ids), {maxTurns, seed:(Math.random()*1e9)|0, foodWeights:sc.w});
+          let guard=0; while(!g.gameOver && guard<maxTurns+5){ g.step(); guard++; }
+          g.result().forEach(r=>{ if(r.id in plays){ plays[r.id]++; if(r.rank===1) wins[r.id]++; } });
+          doneGames++;
+          await tick('测试「'+sc.name+'」');
+        }
+        ids.forEach(id=>{ rate[si][id]= plays[id]? 100*wins[id]/plays[id] : 0; });
+      }
+      renderRobustResult(ids, rate, si+1);
+    }
+    const foeNames = mode==='fixed' ? '（vs '+foeIds.map(f=>{const r=roster.find(x=>x.id===f);return r?r.name:f;}).join('/')+'）' : '（同场混战）';
+    statusEl.textContent= robustAbort
+      ? ('⏹ 已停止（完成 '+doneGames+'/'+totalGames+' 场，结果为部分数据）')
+      : ('✅ 测试完成 每比例 '+N+' 场 '+foeNames+' 用时'+((Date.now()-t0)/1000).toFixed(0)+'s');
+  }catch(e){ statusEl.textContent='💥 出错：'+e.message; }
+  robustBusy=false;
+  document.getElementById('robust-start').disabled=false;
+  if(stopBtn) stopBtn.style.display='none';
+}
+function renderRobustResult(ids, rate, doneCount){
+  const resEl=document.getElementById('robust-result');
+  // 每条蛇：最差/平均/波动
+  const stat=ids.map(id=>{
+    const r=roster.find(x=>x.id===id); const name=r?r.name:id;
+    const vals=[]; for(let si=0; si<doneCount; si++){ if(rate[si][id]!=null) vals.push(rate[si][id]); }
+    const min=vals.length?Math.min.apply(null,vals):0, max=vals.length?Math.max.apply(null,vals):0;
+    const avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+    return { id, name, color:(r&&r.color)||'#888', min, max, avg, band:max-min };
+  });
+  // 按最差情况胜率降序（最鲁棒在前）
+  stat.sort((a,b)=> b.min-a.min || a.band-b.band);
+  let html='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+  html+='<tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border);">'
+    +'<th style="padding:4px;">蛇</th>';
+  for(let si=0; si<doneCount; si++) html+='<th style="padding:4px;text-align:center;">'+ROBUST_SCENARIOS[si].name+'</th>';
+  html+='<th style="padding:4px;text-align:center;color:var(--accent2);">最差</th><th style="padding:4px;text-align:center;">波动</th></tr>';
+  stat.forEach((s,idx)=>{
+    html+='<tr style="border-bottom:1px solid var(--border);'+(idx===0?'background:rgba(45,212,191,.08);':'')+'">';
+    html+='<td style="padding:4px;"><span class="dot" style="background:'+s.color+';display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;"></span>'+escapeHtml(s.name)+(idx===0?' 🏆':'')+'</td>';
+    for(let si=0; si<doneCount; si++){
+      const v=rate[si][s.id];
+      const col = v==null?'':(v>=35?'var(--green)':(v<=15?'var(--red)':'var(--text)'));
+      html+='<td style="padding:4px;text-align:center;color:'+col+';">'+(v==null?'-':v.toFixed(0)+'%')+'</td>';
+    }
+    html+='<td style="padding:4px;text-align:center;font-weight:600;color:var(--accent2);">'+s.min.toFixed(0)+'%</td>';
+    html+='<td style="padding:4px;text-align:center;color:var(--muted);">'+s.band.toFixed(0)+'</td>';
+    html+='</tr>';
+  });
+  html+='</table>';
+  html+='<p class="muted" style="font-size:11px;margin-top:8px;">🏆 = 最鲁棒（最差情况胜率最高）。绿=该比例≥35%，红=≤15%。「最差」列是鲁棒性核心指标，越高越好；「波动」越小越稳。</p>';
+  resEl.innerHTML=html;
+}
+
+// 受保护(留种子)：BUILTIN_LIST 里当前胜率最高的内置蛇
+function strongestBuiltin(){
+  const builtinNames = BUILTIN_LIST.map(b=>b.name);
+  const cands = roster.filter(r=>builtinNames.includes(r.name));
+  if(!cands.length) return null;
+  return cands.slice().sort((a,b)=>{
+    const wa=a.plays? a.wins/a.plays:0, wb=b.plays? b.wins/b.plays:0;
+    return wb-wa || b.points-a.points;
+  })[0];
+}
+function isProtected(r){ const s=strongestBuiltin(); return s && r.id===s.id; }
+
+// 选胜率最低的 N 条可进化蛇（有可读源码）
+function pickWorst(ids, n){
+  const arr = ids.map(id=>roster.find(r=>r.id===id)).filter(Boolean)
+    .filter(r=>r.code && /function|=>|move|return/.test(r.code))
+    .sort((a,b)=>{
+      const wa=a.plays? a.wins/a.plays:0, wb=b.plays? b.wins/b.plays:0;
+      return wa-wb || a.points-b.points;
+    });
+  return arr.slice(0, n);
+}
+
+// 自动进化一条蛇（含回滚保护）
+async function autoEvolveOne(snake){
+  await checkPause(); if(autoState.abort) return;
+  const robust = !!(autoState.cfg && autoState.cfg.robustEval);   // 多比例最差情况回测模式
+  const samp = (autoState.cfg && autoState.cfg.rollbackSamples) || 10;
+  // 基线：鲁棒模式用旧蛇的"最差比例胜率"，否则用历史胜率
+  let beforeRate;
+  if(robust && autoState.cfg && autoState.cfg.rollback){
+    beforeRate = worstCaseWinRate(snake.id, Math.max(4, Math.round(samp/2)), autoState.cfg.maxTurns);
+    if(beforeRate==null) beforeRate = snake.plays? (100*snake.wins/snake.plays) : 0;
+  }else{
+    beforeRate = snake.plays? (100*snake.wins/snake.plays) : 0;
+  }
+  const summary = poolSummaryOf(snake) || { winRate: beforeRate.toFixed(0)+'%', deathBreak:{} };
+  const prompt = buildPoolEvolvePrompt(snake);
+  logAuto('🧬 改进「'+snake.name+'」('+(robust?'最差比例胜率':'当前胜率')+' '+beforeRate.toFixed(0)+'%)…');
+  const reply = await askLLM(prompt, '改进蛇：'+snake.name);
+  if(autoState.abort) return;
+  if(!reply || !reply.trim()){ logAuto('↷ 跳过「'+snake.name+'」(无返回)'); recordEvo({ name:snake.name, status:'skip', note:'无返回/已跳过' }); return { improved:false, delta:0 }; }
+  const parsed = parseEvolveReply(reply);
+  if(!parsed.code){ logAuto('⚠️ 「'+snake.name+'」未解析到代码，跳过'); recordEvo({ name:snake.name, status:'skip', note:'未解析到代码' }); return { improved:false, delta:0 }; }
+  // 备份旧版本，用于回滚
+  const oldCode=snake.code, oldAi=snake.ai;
+  try{
+    applyEvolution(snake, parsed, summary);
+  }catch(e){ logAuto('❌ 「'+snake.name+'」新代码编译失败，保留原版：'+e.message); recordEvo({ name:snake.name, status:'skip', note:'代码编译失败' }); return { improved:false, delta:0 }; }
+  // 回滚校验
+  if(autoState.cfg && autoState.cfg.rollback){
+    const newRate = robust
+      ? worstCaseWinRate(snake.id, Math.max(4, Math.round(samp/2)), autoState.cfg.maxTurns)
+      : quickWinRate(snake.id, samp, autoState.cfg.maxTurns);
+    const tag = robust ? '最差比例' : '回测';
+    if(newRate!=null && newRate < beforeRate - 0.001){
+      snake.code=oldCode; snake.ai=oldAi; snake.diag=newDiag();
+      persistRoster(); renderRoster(); renderSelectList();
+      logAuto('❌ 回滚「'+snake.name+'」：'+tag+' '+newRate.toFixed(0)+'% < 原 '+beforeRate.toFixed(0)+'%（已撤回）');
+      addLessonRecord({ time:new Date().toLocaleString('zh-CN'), snake:snake.name,
+        beforeWinRate:beforeRate.toFixed(0)+'%', beforeDeath:{},
+        advice:'[已回滚-该方向无效'+(robust?'(最差比例退化)':'')+'] '+(parsed.advice||''), lessons:parsed.lessons||'' });
+      recordEvo({ name:snake.name, status:'rollback', before:beforeRate, after:newRate });
+      return { improved:false, delta:(newRate-beforeRate) };
+    }else{
+      const delta = newRate!=null ? (newRate-beforeRate) : 0;
+      logAuto('✅ 「'+snake.name+'」进化生效'+(newRate!=null?'（'+tag+' '+newRate.toFixed(0)+'% ≥ 原 '+beforeRate.toFixed(0)+'%）':''));
+      recordEvo({ name:snake.name, status:'applied', before:beforeRate, after:(newRate!=null?newRate:beforeRate) });
+      return { improved:(newRate!=null? newRate>beforeRate+0.001 : true), delta };
+    }
+  }else{
+    logAuto('✅ 「'+snake.name+'」已应用新代码（未回测）');
+    recordEvo({ name:snake.name, status:'applied', before:beforeRate, after:beforeRate, note:'未回测' });
+    return { improved:true, delta:0 };
+  }
+}
+
+// 取某蛇在数据池里的聚合 summary（给 buildEvolvePrompt 存经验用）
+function poolSummaryOf(snake){
+  const pool=loadPool(); const node=pool[snake.name];
+  if(!node) return null;
+  const s=aggSummary(node.total);
+  return { winRate:s.winRate.toFixed(0)+'%', deathBreak:{
+    撞墙:s.deathPct.撞墙.toFixed(0)+'%', 撞自己:s.deathPct.撞自己.toFixed(0)+'%',
+    撞蛇:s.deathPct.撞蛇.toFixed(0)+'%', 头碰头:s.deathPct.头碰头.toFixed(0)+'%',
+    困死饿死:s.deathPct.困死饿死.toFixed(0)+'%' } };
+}
+
+// 杂交 prompt：融合最强两条蛇的代码
+function buildHybridPrompt(a, b){
+  return SPEC_FOR_LLM + `
+
+【本次任务·杂交进化】下面是当前最强的两条蛇的 move 函数代码。请深入分析两者各自的优势策略（如 A 的空间评估、B 的对抗封锁），融合二者优点、取长补短，设计出一条更强的全新 move(state) 函数。可大胆引入新机制，但必须稳定、不困死、避毒、不撞墙。
+
+【最强蛇 A：${a.name}】
+\`\`\`js
+${a.code}
+\`\`\`
+
+【最强蛇 B：${b.name}】
+\`\`\`js
+${b.code}
+\`\`\`
+
+请只输出融合后的完整 move(state) 函数，用 \`\`\`js 代码块包裹，不要解释。`;
+}
+
+// 保证新蛇名字在擂台里唯一（多次训练后避免重名）：重名则加后缀 -2, -3...
+function uniqueSnakeName(base){
+  if(!roster.some(r=>r.name===base)) return base;
+  let i=2; while(roster.some(r=>r.name===base+'-'+i)) i++;
+  return base+'-'+i;
+}
+
+// 生成新蛇：mode='create' 自创新范式 / mode='hybrid' 杂交最强两条
+async function spawnNewSnake(round, mode){
+  await checkPause(); if(autoState.abort) return;
+  let prompt, name, title;
+  if(mode==='create'){
+    // 自创：注入元规律 + 全局头号死因
+    const meta=loadMeta(); const tdc=topDeathCause();
+    let desc='设计一条全新范式的强力贪吃蛇 AI，追求高胜率与高存活。';
+    if(meta && meta.text) desc+='\n参考已沉淀的元规律：\n'+meta.text;
+    desc+='\n当前全局头号死因是「'+tdc.cause+'」('+tdc.pct+'%)，请重点针对它设计规避机制，并尝试人无我有的新策略。';
+    prompt=buildCreatePrompt(desc);
+    name=uniqueSnakeName('新范式G'+round);
+    title='自创新范式蛇 '+name;
+  }else{
+    // 杂交：取胜率最高两条
+    const top=[...roster].filter(r=>r.code && /function|=>|move|return/.test(r.code))
+      .sort((a,b)=>{ const wa=a.plays?a.wins/a.plays:0, wb=b.plays?b.wins/b.plays:0; return wb-wa||b.points-a.points; });
+    if(top.length<2){ logAuto('↷ 蛇不足2条，跳过杂交'); return; }
+    prompt=buildHybridPrompt(top[0], top[1]);
+    name=uniqueSnakeName('杂交体G'+round);
+    title='杂交最强两条 '+name;
+  }
+  logAuto('🥚 生成新蛇：'+title+'…');
+  const reply=await askLLM(prompt, title);
+  if(autoState.abort) return false;
+  if(!reply || !reply.trim()){ logAuto('↷ 新蛇无返回，跳过'); return false; }
+  const code=extractCode(parseEvolveReply(reply).code || reply);
+  if(!code){ logAuto('⚠️ 新蛇未解析到代码，跳过'); return false; }
+  try{
+    const aiFn=validateCode(code, name);
+    const color=PALETTE[roster.length % PALETTE.length];
+    const r=addRoster(name, color, code, aiFn);
+    autoState.cfg.ids.push(r.id);   // 加入后续轮次参赛
+    logAuto('🐍 新蛇「'+name+'」已加入擂台');
+    recordEvo({ name:name, status:'newsnake', note:(mode==='create'?'LLM创造':'最强杂交') });
+    return true;
+  }catch(e){ logAuto('❌ 新蛇代码无效，未加入：'+e.message); return false; }
+}
+
+// 淘汰最差 count 条蛇。只淘汰已参赛(plays>0)的蛇，避免刚生成的新蛇没比赛就被删
+// LOWER=精英规模下限（维持种群大小）；archiveIt=true 则淘汰前先归档（移入档案库而非彻底删）
+function eliminateWorst(count, lower, archiveIt){
+  count = Math.max(1, count||1);
+  const LOWER = lower || 4;
+  for(let k=0;k<count;k++){
+    if(roster.length<=LOWER){ logAuto('↷ 已达精英规模下限('+LOWER+')，停止淘汰'); return; }
+    const cands=autoState.cfg.ids.map(id=>roster.find(r=>r.id===id)).filter(Boolean)
+      .filter(r=>!isProtected(r) && r.plays>0)   // 跳过受保护蛇 + 本轮刚加入未参赛的新蛇
+      .sort((a,b)=>{ const wa=a.wins/a.plays, wb=b.wins/b.plays; return wa-wb||a.points-b.points; });
+    if(!cands.length){ logAuto('↷ 无可淘汰蛇（均受保护或未参赛）'); return; }
+    const worst=cands[0];
+    const rate=(100*worst.wins/worst.plays).toFixed(0);
+    if(archiveIt){ archiveSnake(worst); }
+    removeRoster(worst.id);
+    autoState.cfg.ids = autoState.cfg.ids.filter(id=>id!==worst.id);
+    logAuto((archiveIt?'📦 归档并移出':'🗑️ 淘汰')+'最差「'+worst.name+'」(胜率 '+rate+'%)'+(archiveIt?'（已存入档案库）':''));
+  }
+}
+
+// 训练结束收尾：只保留胜率最高的 K 条（含受保护蛇恒保留），其余清掉
+function keepTopK(k){
+  k=Math.max(1, k||1);
+  // 受保护蛇恒留；其余按胜率降序，取前 k 条
+  const protectedOnes = roster.filter(r=>isProtected(r));
+  const rest = roster.filter(r=>!isProtected(r))
+    .sort((a,b)=>{ const wa=a.plays?a.wins/a.plays:0, wb=b.plays?b.wins/b.plays:0; return wb-wa||b.points-a.points; });
+  const keepRest = rest.slice(0, k);
+  const drop = rest.slice(k);
+  if(!drop.length){ logAuto('🏆 保留策略：当前蛇数已≤Top-'+k+'，无需清理'); return; }
+  drop.forEach(r=>removeRoster(r.id));
+  const keptNames=[...protectedOnes, ...keepRest].map(r=>{ const wr=r.plays?Math.round(100*r.wins/r.plays)+'%':'—'; return r.name+'('+wr+')'; });
+  logAuto('🏆 已按胜率保留最强 '+keepRest.length+' 条'+(protectedOnes.length?'(+'+protectedOnes.length+'条受保护)':'')+'：'+keptNames.join('、'));
+  logAuto('🗑️ 清理了 '+drop.length+' 条较弱的蛇：'+drop.map(r=>r.name).join('、'));
+  persistRoster();
+}
+
+// 记录每次批量赛快照 + 绘图数据（seq=全局序号，big/micro 用于标签）
+function recordHistory(seq, snap, big, micro){
+  const rates={};
+  Object.keys(snap).forEach(id=>{
+    const r=roster.find(x=>x.id===id); if(r) rates[r.name]=snap[id];
+  });
+  autoState.history.push({ round:seq, big, micro, rates });
+}
+
+// 绘制各蛇胜率折线图（Canvas）
+function drawWinChart(){
+  const cv=document.getElementById('auto-chart'); if(!cv) return;
+  const ctx=cv.getContext('2d'); const W=cv.width, H=cv.height;
+  ctx.clearRect(0,0,W,H);
+  const padL=34, padR=8, padT=10, padB=22;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  // 网格 + Y轴(0-100%)
+  ctx.strokeStyle='#1d2430'; ctx.lineWidth=1; ctx.fillStyle='#8b949e'; ctx.font='10px sans-serif';
+  for(let p=0;p<=100;p+=25){
+    const y=padT+plotH*(1-p/100);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); ctx.stroke();
+    ctx.fillText(p+'%', 4, y+3);
+  }
+  const hist=autoState.history; if(!hist.length) return;
+  const rounds=hist.length;
+  const xOf=i=> padL + (rounds<=1? plotW/2 : plotW*i/(rounds-1));
+  const yOf=v=> padT + plotH*(1-Math.max(0,Math.min(100,v))/100);
+  // 收集所有出现过的蛇名
+  const names={};
+  hist.forEach(h=>Object.keys(h.rates).forEach(n=>names[n]=true));
+  Object.keys(names).forEach(n=>{
+    const r=roster.find(x=>x.name===n);
+    const color=(r&&r.color)||'#888';
+    ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=2;
+    ctx.beginPath(); let started=false;
+    hist.forEach((h,i)=>{
+      if(h.rates[n]==null) return;
+      const x=xOf(i), y=yOf(h.rates[n]);
+      if(!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    hist.forEach((h,i)=>{ if(h.rates[n]==null)return; ctx.beginPath(); ctx.arc(xOf(i),yOf(h.rates[n]),2.5,0,7); ctx.fill(); });
+  });
+  // X 轴：大循环.小循环 标签（数据量大时稀疏显示）
+  ctx.fillStyle='#8b949e';
+  const stepLbl = Math.ceil(rounds/12);
+  hist.forEach((h,i)=>{
+    if(i%stepLbl!==0 && i!==rounds-1) return;
+    const lbl = (h.big!=null && h.micro!=null) ? (h.big+'.'+h.micro) : ('R'+h.round);
+    ctx.fillText(lbl, xOf(i)-8, H-6);
+  });
+}
+
+function persistTrainHistory(){
+  try{ localStorage.setItem(TRAIN_KEY, JSON.stringify({ cfg:autoState.cfg, startTime:autoState.startTime, history:autoState.history })); }catch(e){}
+}
+
+function exportTrainHistory(){
+  if(!autoState.history.length){ toast('暂无训练历史'); return; }
+  const names={}; autoState.history.forEach(h=>Object.keys(h.rates).forEach(n=>names[n]=true));
+  const cols=Object.keys(names);
+  let csv='大循环,小循环,序号,'+cols.join(',')+'\n';
+  autoState.history.forEach(h=>{
+    csv+=(h.big!=null?h.big:'')+','+(h.micro!=null?h.micro:'')+','+h.round+','
+      +cols.map(n=>h.rates[n]!=null?h.rates[n].toFixed(0):'').join(',')+'\n';
+  });
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='snake_train_history.csv'; a.click();
+  toast('已导出训练历史 CSV');
+}
+
+// 主循环
+async function runAutoTrain(cfg){
+  if(autoState.running){ toast('训练已在进行中'); return; }
+  stopLoop();
+  const lastIds = cfg.ids.slice();
+  autoState={ running:true, paused:false, abort:false, round:0, big:0, micro:0, cfg, history:[], resolvePause:null, resolveManual:null, evoLog:[], lastIds, startTime:new Date().toISOString() };
+  renderEvoLog();
+  document.getElementById('auto-log').innerHTML='';
+  showAutoRunView();
+  const KEEPTXT={ 'elite-archive':'精英'+cfg.eliteSize+'条+淘汰者存档', elite:'精英'+cfg.eliteSize+'条(淘汰者删除)', topk:'只留最终Top-'+cfg.topK, all:'全部保留' };
+  logAuto('🚀 三层飞轮启动：大循环 '+cfg.bigRounds+' 轮 × 小循环上限 '+cfg.microMax
+    + ' · 每次批量赛 '+cfg.matches+' 场 · 提升最差 '+cfg.improveN+' 条'
+    + (cfg.rollback?' · 回滚保护':'') + (cfg.converge?' · 收敛即停':'')
+    + (cfg.metaEvery>0?(' · 每'+cfg.metaEvery+'次小循环总结'):'')
+    + (cfg.randFood?' · 🛡️随机食物比例':'') + (cfg.robustEval?' · 🛡️多比例回测':'')
+    + ' · 保留策略：'+(KEEPTXT[cfg.keepPolicy]||cfg.keepPolicy));
+  setAutoStatus('运行中…');
+  let microTotal=0;   // 全局小循环计数（用于元规律频次 L）
+  try{
+    // ===== 外层：大循环 =====
+    for(let big=1; big<=cfg.bigRounds; big++){
+      if(autoState.abort) break;
+      autoState.big=big;
+      logAuto('════════ 大循环 '+big+'/'+cfg.bigRounds+' ════════');
+      let noGainStreak=0;   // 连续无提升的小循环数（用于收敛判定）
+
+      // ===== 中层：小循环（同批打磨 K 次）=====
+      for(let micro=1; micro<=cfg.microMax; micro++){
+        if(autoState.abort) break;
+        autoState.micro=micro; microTotal++;
+        await checkPause(); if(autoState.abort) break;
+
+        // 过滤掉已被淘汰的 id
+        cfg.ids = cfg.ids.filter(id=>roster.find(r=>r.id===id));
+        if(cfg.ids.length<2){ logAuto('⚠️ 参赛蛇不足2条，终止'); break; }
+
+        setAutoStatus('大循环 '+big+' · 小循环 '+micro+'/'+cfg.microMax+' · 批量赛');
+        logAuto('—— 小循环 '+micro+'/'+cfg.microMax+' ——');
+
+        // ① 内层：批量赛
+        logAuto('🏟️ 批量赛 '+cfg.matches+' 场…'+(cfg.randFood?'（随机食物比例）':''));
+        const snap=await runBatchHeadless(cfg.ids, cfg.matches, cfg.maxTurns, cfg.randFood);
+        if(autoState.abort) break;
+        recordHistory(microTotal, snap, big, micro); drawWinChart();
+
+        // ② 提升最差 N 条
+        setAutoStatus('大循环 '+big+' · 小循环 '+micro+' · 提升弱蛇');
+        const worst=pickWorst(cfg.ids, cfg.improveN);
+        logAuto('🎯 提升最差 '+worst.length+' 条：'+worst.map(s=>s.name).join('、'));
+        let anyImproved=false;
+        for(const s of worst){
+          if(autoState.abort) break;
+          const res=await autoEvolveOne(s);
+          if(res && res.improved) anyImproved=true;
+        }
+        if(autoState.abort) break;
+
+        // ③ 每 L 次小循环总结元规律
+        if(cfg.metaEvery>0 && microTotal % cfg.metaEvery===0){
+          setAutoStatus('大循环 '+big+' · 小循环 '+micro+' · 总结元规律');
+          logAuto('🧠 提炼元规律（累计第 '+microTotal+' 次小循环）…');
+          const meta=await askLLM(buildSynthesizePrompt(), '总结元规律(小循环#'+microTotal+')');
+          if(meta && meta.trim()){ saveMeta({ text:meta.trim(), time:new Date().toLocaleString('zh-CN'), count:loadLessons().length }); logAuto('📚 元规律已更新'); }
+          if(autoState.abort) break;
+        }
+
+        // ④ 收敛判定：连续2次小循环没有任何蛇提升 → 提前结束小循环
+        if(cfg.converge){
+          noGainStreak = anyImproved ? 0 : (noGainStreak+1);
+          if(noGainStreak>=2){ logAuto('🟰 已收敛（连续2次小循环无提升），提前结束本大循环的打磨'); break; }
+        }
+        persistTrainHistory();
+      }
+      if(autoState.abort) break;
+
+      // ===== 大循环末尾：换代（创造 + 杂交，加X淘X）=====
+      setAutoStatus('大循环 '+big+' · 换代（创造新蛇）');
+      logAuto('🧬 大循环 '+big+' 收尾：引入新蛇…');
+      let added=0;
+      if(await spawnNewSnake(big, 'create')) added++;
+      if(autoState.abort) break;
+      if(await spawnNewSnake(big, 'hybrid')) added++;
+      if(autoState.abort) break;
+      if(cfg.eliminate && added>0){ eliminateWorst(added, cfg.eliteSize, cfg.archiveElim); }   // 加几条淘几条，维持精英规模
+      logAuto('🔄 大循环 '+big+' 换代完成：新增 '+added+' 条'+(cfg.eliminate?(cfg.archiveElim?' · 归档 '+added+' 条':' · 淘汰 '+added+' 条'):''));
+      persistTrainHistory();
+      drawWinChart();
+    }
+  }catch(e){ logAuto('💥 训练异常：'+e.message); }
+  // ===== 训练结束：按保留策略收尾 =====
+  if(!autoState.abort && cfg.keepPolicy==='topk'){
+    setAutoStatus('收尾：保留最强 Top-'+cfg.topK);
+    keepTopK(cfg.topK);
+  }
+  autoState.running=false;
+  autoState.paused=false;
+  setAutoStatus(autoState.abort?'已中止':'已完成');
+  logAuto(autoState.abort?'⏹ 训练已中止':'🏁 训练完成！共 '+autoState.big+' 个大循环 · '+autoState.history.length+' 次批量赛');
+  // 进化汇总
+  const el=autoState.evoLog||[];
+  const cc={ applied:0, rollback:0, newsnake:0, skip:0 };
+  el.forEach(e=>{ if(cc[e.status]!=null) cc[e.status]++; });
+  if(el.length){
+    logAuto('📋 进化汇总：本次共改进尝试 '+(cc.applied+cc.rollback+cc.skip)+' 次（生效 '+cc.applied+' · 回滚 '+cc.rollback+' · 跳过 '+cc.skip+'）；新增蛇 '+cc.newsnake+' 条');
+    const applied=el.filter(e=>e.status==='applied');
+    if(applied.length) logAuto('  ↑ 实际变强：'+applied.map(e=>e.name+(e.after!=null&&e.before!=null?'('+(e.after-e.before>=0?'+':'')+(e.after-e.before).toFixed(0)+'%)':'')).join('、'));
+    const news=el.filter(e=>e.status==='newsnake');
+    if(news.length) logAuto('  🐣 新加入：'+news.map(e=>e.name).join('、'));
+  }else{
+    logAuto('📋 本次没有任何蛇被进化（无大模型时是否点了"跳过本步"？配置 API 后可全自动进化）');
+  }
+  if(cc.newsnake) logAuto('💾 新蛇已保存到本地，刷新页面仍在；可在右侧擂台/排行榜查看');
+  persistRoster();   // 兜底：确保进化后的蛇 + 新蛇全部落盘
+  renderEvoLog();
+  renderRoster(); renderSelectList(); renderRankboard();
+  const ctrl=document.getElementById('auto-running-ctrl'); if(ctrl) ctrl.style.display='none';
+  const done=document.getElementById('auto-done-ctrl'); if(done) done.style.display='';
+}
+
+/* ---------- 训练面板 UI ---------- */
+function openAutoTrain(){
+  if(autoState.running){ document.getElementById('modal-auto').classList.add('show'); showAutoRunView(); return; }
+  document.getElementById('modal-auto').classList.add('show');
+  renderTrainRosterList();   // 渲染参赛蛇勾选列表
+  showAutoCfgView();
+}
+
+// ---------- 训练面板内的「参赛蛇」勾选列表 ----------
+// 默认沿用上次训练选择 / 否则同步右侧勾选 / 再否则全选
+function renderTrainRosterList(){
+  const box=document.getElementById('at-roster-list'); if(!box) return;
+  // 初始勾选集合：上次训练用过的 ids ∩ 现有蛇；为空则用右侧勾选；再空则全选
+  let preset = (autoState.lastIds||[]).filter(id=>roster.find(r=>r.id===id));
+  if(!preset.length){ preset = getSelectedIds(); }
+  if(!preset.length){ preset = roster.map(r=>r.id); }
+  const presetSet = new Set(preset);
+  box.innerHTML = roster.map(r=>{
+    const wr = r.plays? Math.round(100*r.wins/r.plays)+'%' : '—';
+    return `<label class="checkrow" style="width:auto;margin:0;">
+      <input type="checkbox" class="at-sel" value="${r.id}" ${presetSet.has(r.id)?'checked':''}>
+      <span class="dot" style="background:${r.color}"></span>
+      <span class="nm" style="font-size:12px;">${escapeHtml(r.name)}</span>
+      <span class="muted" style="font-size:10px;">${wr}</span>
+    </label>`;
+  }).join('') || '<span class="muted">擂台暂无蛇，请先添加</span>';
+  box.querySelectorAll('.at-sel').forEach(c=>c.onchange=updateTrainSelCount);
+  updateTrainSelCount();
+}
+function getTrainSelectedIds(){
+  return [...document.querySelectorAll('.at-sel:checked')].map(c=>c.value);
+}
+function updateTrainSelCount(){
+  const el=document.getElementById('at-sel-count'); if(!el) return;
+  el.textContent = '已选 '+getTrainSelectedIds().length+' / '+roster.length+' 条';
+}
+function showAutoCfgView(){
+  document.getElementById('auto-cfg-view').style.display='';
+  document.getElementById('auto-run-view').style.display='none';
+}
+function showAutoRunView(){
+  document.getElementById('auto-cfg-view').style.display='none';
+  document.getElementById('auto-run-view').style.display='';
+  document.getElementById('auto-running-ctrl').style.display = autoState.running?'':'none';
+  document.getElementById('auto-done-ctrl').style.display = autoState.running?'none':'';
+}
+
+// 手动兜底弹窗（自动训练无 API 时用）：复制 prompt → 回填 → resolve
+function showManualModal(title, prompt, resolve){
+  const wrap=document.getElementById('modal-manual');
+  document.getElementById('manual-title').textContent='✋ 手动调用大模型 · '+title;
+  document.getElementById('manual-prompt').value=prompt;
+  document.getElementById('manual-result').value='';
+  document.getElementById('manual-msg').textContent='';
+  wrap.classList.add('show');
+  let done=false;
+  const finish=(txt)=>{ if(done)return; done=true; wrap.classList.remove('show'); autoState.resolveManual=null; resolve(txt); };
+  // 暴露给「中止」按钮：中止时可立即关掉弹窗并 resolve，避免卡死
+  autoState.resolveManual=finish;
+  document.getElementById('manual-copy').onclick=()=>{
+    navigator.clipboard.writeText(prompt).then(()=>toast('提示词已复制')).catch(()=>{
+      const ta=document.getElementById('manual-prompt'); ta.select(); document.execCommand('copy'); toast('提示词已复制');
+    });
+  };
+  document.getElementById('manual-submit').onclick=()=>{
+    const v=document.getElementById('manual-result').value.trim();
+    if(!v){ document.getElementById('manual-msg').textContent='❌ 请先粘贴 AI 返回的内容（或点跳过）'; return; }
+    finish(v);
+  };
+  document.getElementById('manual-skip').onclick=()=> finish('');
+}
+
 // 启动：优先从本地恢复上次的擂台（含进化后的蛇），没有再用初始内置陪练
 bindEvents();
+restoreArchive();   // 恢复归档库
 if(!restoreRoster()){
   seedBuiltins();
 }else{
