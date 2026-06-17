@@ -265,11 +265,11 @@
       </p>
       <div class="field">
         <label style="width:auto;">🥟包子</label>
-        <input type="number" id="food-bun" class="small-input" style="width:54px;" value="55" min="0" max="100">
+        <input type="number" id="food-bun" class="small-input" style="width:54px;" value="20" min="0" max="100">
         <label style="width:auto;">🍑蟠桃</label>
-        <input type="number" id="food-peach" class="small-input" style="width:54px;" value="15" min="0" max="100">
+        <input type="number" id="food-peach" class="small-input" style="width:54px;" value="2" min="0" max="100">
         <label style="width:auto;">🕷️毒</label>
-        <input type="number" id="food-spider" class="small-input" style="width:54px;" value="30" min="0" max="100">
+        <input type="number" id="food-spider" class="small-input" style="width:54px;" value="1" min="0" max="100">
       </div>
       <div id="food-ratio-bar" style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-bottom:4px;"></div>
       <div id="food-ratio-label" class="muted" style="font-size:11px;margin-bottom:4px;"></div>
@@ -542,7 +542,7 @@
       <span class="close" data-close>×</span>
       <h2>🛡️ 鲁棒性测试</h2>
       <p class="muted" style="line-height:1.6;margin-bottom:10px;">
-        用 6 种食物比例（默认/毒蜘蛛海/蟠桃盛宴/全是包子/高危少食/均衡）各跑一批，给每条蛇出一张「比例×胜率」表。
+        在多种食物比例下各跑一批，给每条蛇出一张「比例×胜率」表。<b>核心6种</b>日常快测、<b>全部15种</b>覆盖更全（含零毒/极缺/无包等盲区）。
         <b>最差情况胜率越高、波动越小 = 越鲁棒</b>（应对食物比例变化能力越强）。
       </p>
       <div class="field">
@@ -562,6 +562,17 @@
         • <b>对照陪练</b>模式：每条被测蛇分别与这 3 条固定对手凑成 4 蛇混战，唯一变量是食物比例，结果最科学可比。被测蛇 = 右侧勾选（未勾用全部）。<br>
         • <b>同场混战</b>模式：直接用右侧勾选的蛇互相对打（旧逻辑）。
       </p>
+      <div class="field" style="align-items:flex-start;">
+        <label style="width:auto;">测试比例</label>
+        <div style="flex:1;">
+          <div style="margin-bottom:4px;">
+            <button class="btn-sm" id="robust-scn-core" style="width:auto;">核心6种</button>
+            <button class="btn-sm" id="robust-scn-all" style="width:auto;margin-left:6px;">全部15种</button>
+            <span class="muted" id="robust-scn-count" style="font-size:11px;margin-left:8px;"></span>
+          </div>
+          <div id="robust-scn-list" style="display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;"></div>
+        </div>
+      </div>
       <div class="field" id="robust-cfg">
         <label style="width:auto;">每比例场数</label>
         <input type="number" id="robust-n" class="small-input" style="width:70px;" value="20" min="5" max="200">
@@ -617,7 +628,7 @@ const CELL = 32;                 // 像素/格
 const INIT_HP = 100;
 const INIT_LEN = 3;
 const DEFAULT_MAX_TURNS = 1000;
-const FOOD_COUNT = 8;            // 地图维持的食物数（5→8：默认比例约30%是毒蜘蛛，实际可吃从~3.5提到~5.6，缓解4蛇开局抢光后饿死）
+const FOOD_COUNT = 8;            // 地图维持的食物数。默认比例 20:2:1(包子87%/蟠桃8.7%/毒4.3%)，8食物里约7.6个可吃，开局饿死压力小
 
 const DIRS = {
   up:    {x:0, y:-1},
@@ -662,7 +673,7 @@ class SnakeGame {
     this.gameOver = false;
     this.deathLog = [];     // 死亡顺序记录
     // 食物比例权重 {bun,peach,spider}，缺省走默认值
-    this.foodWeights = opts.foodWeights || { bun:55, peach:15, spider:30 };
+    this.foodWeights = opts.foodWeights || { bun:20, peach:2, spider:1 };   // 20:2:1 ≈ 包子87%/蟠桃8.7%/毒4.3%(每10包子约出1桃或1毒)
     this.snakes = players.map((p,i)=> this._spawn(p,i,players.length));
     this._fillFood();
   }
@@ -1247,7 +1258,7 @@ const BUILTIN_AIS = {
     var hungerBoost=myHp<55?(1+(55-myHp)/22):1;       // 续命更早(55)且更陡,治62%饿死
     var P;
     if(hpTier==='critical'){P={space:phase==='mature'?6:4.5,food:260,hunt:0,edge:phase==='mature'?12:4};}
-    else if(phase==='young'){P=hpTier==='healthy'?{space:3,food:170,hunt:0,edge:2}:{space:3.5,food:210,hunt:0,edge:3};}
+    else if(phase==='young'){P=hpTier==='healthy'?{space:3,food:120,hunt:0,edge:2}:{space:3.5,food:160,hunt:0,edge:3};}
     else if(phase==='grow'){P=hpTier==='healthy'?{space:4,food:120,hunt:0,edge:5}:{space:4.5,food:180,hunt:0,edge:6};}
     else{P=hpTier==='healthy'?{space:6,food:70,hunt:1,edge:13}:{space:6.5,food:130,hunt:0,edge:13};}
     P.food=Math.round(P.food*hungerBoost);
@@ -1284,8 +1295,7 @@ const BUILTIN_AIS = {
       if(onSpider)score-=400;                            // 避毒加重(误吃22次→压低)
       if(canHunt&&space>=softThreshold){if(killZone[nk])score+=100*P.hunt;if(pathHunt&&pathHunt.firstDir===d)score+=50*P.hunt-pathHunt.dist*4;}
       var ed=Math.min(nx,ny,W-1-nx,H-1-ny);
-      if(phase==='mature'){if(ed<=2)score-=(3-ed)*P.edge;}
-      else{var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.4;}
+      if(ed<=2){score-=(3-ed)*P.edge;}else if(phase!=='mature'){var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.4;}
       cand.push({dir:d,score:score});
     }
     if(cand.length===0){var fb=self.dir,bsp=-1;for(var dz in DIRS){if(dz===OPP[self.dir])continue;var sp=floodSpace(head.x+DIRS[dz].x,head.y+DIRS[dz].y);if(sp>bsp){bsp=sp;fb=dz;}}return fb;}
@@ -1350,7 +1360,7 @@ const BUILTIN_AIS = {
     var soleEnemy=endgame?enemies[0]:null;
     var P;
     if(hpTier==='critical'){P={space:phase==='mature'?6:4.5,food:260,hunt:0,edge:phase==='mature'?12:4};}
-    else if(phase==='young'){P=hpTier==='healthy'?{space:3,food:170,hunt:0,edge:2}:{space:3.5,food:210,hunt:0,edge:3};}
+    else if(phase==='young'){P=hpTier==='healthy'?{space:3,food:120,hunt:0,edge:2}:{space:3.5,food:160,hunt:0,edge:3};}
     else if(phase==='grow'){P=hpTier==='healthy'?{space:4,food:120,hunt:0,edge:5}:{space:4.5,food:180,hunt:0,edge:6};}
     else{P=hpTier==='healthy'?{space:6,food:70,hunt:1,edge:13}:{space:6.5,food:130,hunt:0,edge:13};}
     P.food=Math.round(P.food*hungerBoost);
@@ -1399,11 +1409,121 @@ const BUILTIN_AIS = {
         if(myLen<soleEnemy.len){ score-=advantage*1.8; if(squeeze>0)score-=squeeze*5; } // 比对手短:取消封锁奖励,纯生存
       }
       var ed=Math.min(nx,ny,W-1-nx,H-1-ny);
-      if(phase==='mature'){if(ed<=2)score-=(3-ed)*P.edge;}
-      else{var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.4;}
+      if(ed<=2){score-=(3-ed)*P.edge;}else if(phase!=='mature'){var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.4;}
       cand.push({dir:d,score:score});
     }
     if(cand.length===0){var fb=self.dir,bsp=-1;for(var dz in DIRS){if(dz===OPP[self.dir])continue;var sp=floodSpace(head.x+DIRS[dz].x,head.y+DIRS[dz].y);if(sp>bsp){bsp=sp;fb=dz;}}return fb;}
+    cand.sort(function(a,b){return b.score-a.score;});
+    return cand[0].dir;
+  },
+
+  // 🦅 猎魂Apex：按"冠军配方"造的专精蛇——取 FSM(亚军)的生存底座+抢食内核 + 围猎(冠军)的零风险squeeze绞杀
+  //   + 今天验证过的成熟期边缘惩罚。设计铁律：坚决做减法，绝不加数地/minimax/全能化(那些是棋圣Ω·弈反复栽的包袱)。
+  //   配方 = 保命5 : 抢食3.5 : 零风险杀招1.5。核心信念:擂台主要矛盾就是"抢食长身+别死",把这两件做到极致+杀招零风险=冠军。
+  apexHunter: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    var OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var blocked={},tails={},enemies=[],enemyBodyNear={};
+    for(var i=0;i<state.snakes.length;i++){
+      var s=state.snakes[i];if(!s.alive)continue;
+      for(var j=0;j<s.body.length;j++)blocked[K(s.body[j].x,s.body[j].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      if(s.id!==self.id){
+        enemies.push({x:s.body[0].x,y:s.body[0].y,len:s.length,dir:s.dir});
+        for(var b=0;b<s.body.length;b++){for(var db in D){enemyBodyNear[K(s.body[b].x+D[db].x,s.body[b].y+D[db].y)]=true;}}
+      }
+    }
+    // 头碰头预测：敌下一步可达格(剔除其反向)。len>=myLen=致命禁区；==myLen=同归于尽；<myLen=可猎杀
+    var dangerStep1={},killZone={},contestEqual={};
+    for(var e=0;e<enemies.length;e++){var en=enemies[e];for(var d in D){if(d===OPP[en.dir])continue;
+      var ax=en.x+D[d].x,ay=en.y+D[d].y,ek=K(ax,ay);
+      if(en.len>myLen)dangerStep1[ek]=true;
+      else if(en.len===myLen){dangerStep1[ek]=true;contestEqual[ek]=true;}
+      else killZone[ek]=true;}}
+    function inB(x,y){return x>=0&&y>=0&&x<W&&y<H;}
+    function passable(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k]){if(t&&tails[k])return true;return false;}return true;}
+    function floodSpace(sx,sy,extra){if(!passable(sx,sy,true))return 0;if(extra&&extra[K(sx,sy)])return 0;var seen={},stk=[[sx,sy]],c=0,cap=W*H;while(stk.length&&c<cap){var cur=stk.pop(),cx=cur[0],cy=cur[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;c++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,nk=K(nx,ny);if(!seen[nk]&&passable(nx,ny,true)&&!(extra&&extra[nk]))stk.push([nx,ny]);}}return c;}
+    function openNb(x,y){var n=0;for(var d in D){if(passable(x+D[d].x,y+D[d].y,true))n++;}return n;}
+    function bfsTo(t){var v={};v[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;while(qi<q.length){var nd=q[qi++];for(var d in D){var nx=nd.x+D[d].x,ny=nd.y+D[d].y,nk=K(nx,ny);if(v[nk]||!passable(nx,ny,true))continue;var fs=nd.first||d;if(nd.dist===0&&dangerStep1[nk])continue;v[nk]=true;if(t[nk])return{firstDir:fs,dist:nd.dist+1};q.push({x:nx,y:ny,first:fs,dist:nd.dist+1});}}return null;}
+    // 残局对手可达空间(零风险squeeze用)：从敌头泛洪,可传我方新头作障碍
+    function enemySpace(en,extra){var best=0;for(var d in D){if(d===OPP[en.dir])continue;var nx=en.x+D[d].x,ny=en.y+D[d].y;if(!passable(nx,ny,true))continue;if(extra&&extra[K(nx,ny)])continue;var sp=floodSpace(nx,ny,extra);if(sp>best)best=sp;}return best;}
+
+    // ====== 生存底座(占50%精力) ======
+    var phase=myLen<8?'young':(myLen<=13?'grow':'mature');
+    var hpTier=myHp>=50?'healthy':(myHp>=25?'hungry':'critical');
+    var spaceThreshold=phase==='young'?(myLen+4):phase==='grow'?Math.ceil(myLen*1.3):Math.ceil(myLen*1.6); // 相位空间硬闸:越长要求回旋越大
+    var softThreshold=spaceThreshold+Math.ceil(myLen*0.4);
+    var hungerBoost=myHp<55?(1+(55-myHp)/22):1;   // 陡峭饥饿续命:HP<55陡升
+    // ====== 抢食内核(占35%精力) ======
+    // [调参v2 对标围猎] 病灶:蟠桃/全包子(满地食物长身)档偏弱,因 mature/grow 期 food 拉力不足、抢食被空间权重盖过。
+    //   对标围猎默认56/全包子58 → 全面抬高 food(grow/mature 各档+30~50%)，让弈在富食局"持续吃、猛长身"。
+    var P;
+    if(hpTier==='critical'){P={space:phase==='mature'?6:4.5,food:280,edge:phase==='mature'?12:4};}   // [回滚v3→v2] 300→280:v3过贪致默认/全包子崩盘,回到v2(最差30)
+    else if(phase==='young'){P=hpTier==='healthy'?{space:3,food:185,edge:2}:{space:3.5,food:220,edge:3};}
+    else if(phase==='grow'){P=hpTier==='healthy'?{space:4,food:165,edge:5}:{space:4.5,food:210,edge:6};}      // grow:120→165 / 180→210(发育期多吃)
+    else{P=hpTier==='healthy'?{space:6,food:115,hunt:0.7,edge:13}:{space:6.5,food:165,hunt:0,edge:13};}          // mature:75→115 / 135→165 + 七成威力猎杀(追差≥4的短蛇)
+    P.food=Math.round(P.food*hungerBoost);
+    var foodTargets={},bestFood=null,bf=-1e9;
+    // [回滚v3→v2] 包子价值 48→40(v3的48让纯包子局过贪崩到10%)；蟠桃120、健康距离惩罚1.1 是v2有效项,保留。
+    for(var f=0;f<state.foods.length;f++){var fd=state.foods[f];if(fd.type==='spider')continue;var dist=Math.abs(fd.x-head.x)+Math.abs(fd.y-head.y);var val=fd.type==='peach'?120:40;var distPen=hpTier==='critical'?0:(hpTier==='hungry'?0.8:1.1);var sc0=val*hungerBoost-dist*distPen;foodTargets[K(fd.x,fd.y)]=true;if(sc0>bf){bf=sc0;bestFood=fd;}}
+    var prim={};if(bestFood)prim[K(bestFood.x,bestFood.y)]=true;
+    var pathFood=bfsTo(prim)||bfsTo(foodTargets);
+    // 成熟期适度猎杀:只追明显更短的(距≤2且身长差≥4,Apex用-4比Siege的-3更保守)
+    var huntTarget=null,huntDist=1e9;
+    if(P.hunt&&hpTier==='healthy'&&phase==='mature'){for(var k=0;k<enemies.length;k++){if(enemies[k].len<=myLen-4){var dq=Math.abs(enemies[k].x-head.x)+Math.abs(enemies[k].y-head.y);if(dq<huntDist){huntDist=dq;huntTarget=enemies[k];}}}}
+    var canHunt=huntTarget&&huntDist<=2;
+    var pathHunt=canHunt?bfsTo(killZone):null;
+    // ====== 零风险squeeze(占15%精力) ======
+    var endgame=(enemies.length===1);
+    var soleEnemy=endgame?enemies[0]:null;
+    var baseEnemySpace=endgame?enemySpace(soleEnemy,null):0;
+
+    var cand=[];
+    for(var d in D){
+      if(d===OPP[self.dir])continue;
+      var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      var score=0;
+      var space=floodSpace(nx,ny);
+      score+=space*P.space;
+      if(space<spaceThreshold)score-=10000;                         // 空间硬闸:不够直接否决
+      else if(space<softThreshold)score-=(softThreshold-space)*60;
+      if(openNb(nx,ny)<=1)score-=150;
+      if(dangerStep1[nk]){var sa=openNb(nx,ny);score-=(contestEqual[nk]?700:600);if(sa<=2)score-=300;}  // 头碰头死因封堵
+      if(enemyBodyNear[nk])score-=100;
+      if(pathFood&&pathFood.firstDir===d){score+=P.food-pathFood.dist*(hpTier==='critical'?0.5:(hpTier==='hungry'?0.8:1.2));}  // [调参v2] 健康路径距离惩罚1.8→1.2:富食局别因路远放弃抢食
+      var onFood=false,onSpider=false;
+      for(var ff=0;ff<state.foods.length;ff++){if(state.foods[ff].x===nx&&state.foods[ff].y===ny){if(state.foods[ff].type==='spider')onSpider=true;else onFood=true;}}
+      if(onFood&&!dangerStep1[nk])score+=P.food*0.8;
+      if(onSpider)score-=400;                                       // 避毒重罚
+      // 主动头碰头吃短蛇:追猎时+110(敢出手),平时+70(被动防御)
+      if(killZone[nk]&&space>=softThreshold)score+=canHunt?110:70;
+      // 成熟期BFS导向追猎:半威力版(30-path*2),只追明显更短的
+      if(canHunt&&space>=softThreshold&&pathHunt&&pathHunt.firstDir===d)score+=30-pathHunt.dist*2;
+      // 成熟期边缘惩罚:身越长越怕贴墙(防被平行墙绞杀)
+      var ed=Math.min(nx,ny,W-1-nx,H-1-ny);
+      if(ed<=2){score-=(3-ed)*P.edge;}else if(phase!=='mature'){var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.4;} // 幼年居中,易抢食
+      // ====== 零风险squeeze绞杀:始终评估空间博弈,但长/短策略相反 ======
+      if(endgame && space>=softThreshold){
+        var extra={};extra[nk]=true;
+        var enSp=enemySpace(soleEnemy,extra);
+        var squeeze=baseEnemySpace-enSp;
+        var advantage=space-enSp;
+        if(myLen>=soleEnemy.len){
+          score+=advantage*1.8;                                    // 我更长:正奖励,压对手
+          if(squeeze>0)score+=squeeze*5;                           // 主动封口
+          if(enSp>0&&enSp<soleEnemy.len*1.1)score+=450;            // 压进死空间→绝杀
+        } else {
+          score-=advantage*1.8;                                    // 比我长:反向避让,不送死
+          if(squeeze>0)score-=squeeze*5;                           // 避免主动封口挑衅
+        }
+      }
+      cand.push({dir:d,score:score});
+    }
+    if(cand.length===0){var fb=self.dir,bsp=-1;for(var dz in D){if(dz===OPP[self.dir])continue;var sp2=floodSpace(head.x+D[dz].x,head.y+D[dz].y);if(sp2>bsp){bsp=sp2;fb=dz;}}return fb;}
     cand.sort(function(a,b){return b.score-a.score;});
     return cand[0].dir;
   },
@@ -1625,25 +1745,325 @@ const BUILTIN_AIS = {
     cand.sort(function(a,b){return b.score-a.score;});return cand[0].dir;
   },
 
+  // 🔍 探索先锋(SeekerVanguard)：强力搜索型专精蛇。
+  //   核心创新：一次BFS找到所有可达食物，计算每个食物的"我-对手到达差"(lead)，
+  //   按方向聚合所有领先食物的价值——不再只盯最优一个目标，而是"哪个方向上能吃的更多就走哪边"。
+  //   防守底座：空间硬闸+头碰头+避毒+贴墙+相位阈值，轻量但完整。不做仲裁器/数地/minimax。
+  seekerVanguard: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    var OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
 
-  // 🏯 棋圣Ω·弈(GoSagePro)：在棋圣Ω 上加【四合一混战增强】，由阶段门控协调。
-  //   多蛇期(蛇数≥3)：①④ 多源势力图抢食(BFS算每个食物"我-最近对手到达差"，优先抢领先最多的) +
-  //     ② 苟到决赛圈(远离蛇群扎堆区，让对手内耗) + ③ 头碰头主动吃(明显更长+落点安全→主动撞短蛇清场)。
-  //   决赛圈(蛇数=2)：自动切换围棋大脑(双源势力图/分断/2层minimax)全力围杀。
-  //   2026-06-16。新参数在 PM.mc* 区。混战增强目标：把混战从中游提到中上(策略层天花板仍受"食物零和饿死"约束)。
-  //   2026-06-16 抢食强化(治"前期抢食不够易饿死")：①去掉多蛇期抢食0.8折(交gFood调节,发育期1.35更猛)；
-  //     ②苟权重按血量渐进 avoidScale(HP>70不苟/55~70升/低血降至0.3/濒死0,即"吃饱了才苟")；
-  //     ③多目标抢食 mcDirScore(对所有我领先的食物按方向递减累计,不再只盯单一目标)；④急食阈值 lowHp 55→65 前移。
-  //   2026-06-16 成熟度驱动丝滑过渡(治"开局即1v1 不发育"断崖)：新增 maturity(0~1,综合双方平均长度0.55+回合0.25+拥挤0.20)。
-  //     围棋大脑 endgameGain 改为 isEndgame×maturity 连续渐开(不再一进1v1就硬跳1.0)；ENDGAME阶段须 maturity>=0.5 才进；
-  //     gFood 在1v1按 maturity 于 1.2(发育)↔0.7(收官) 平滑过渡。→ 开局1v1先抢食发育、长大后才围杀；4→3→2递减同一套逻辑无断崖。
+    var blocked={},tails={},enemies=[],enemyBodyNear={};
+    for(var i=0;i<state.snakes.length;i++){
+      var s=state.snakes[i];if(!s.alive)continue;
+      for(var j=0;j<s.body.length;j++)blocked[K(s.body[j].x,s.body[j].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      if(s.id!==self.id){
+        enemies.push({x:s.body[0].x,y:s.body[0].y,len:s.length,dir:s.dir});
+        for(var b=0;b<s.body.length;b++){for(var db in D){enemyBodyNear[K(s.body[b].x+D[db].x,s.body[b].y+D[db].y)]=true;}}
+      }
+    }
+
+    // 头碰头预测
+    var dangerStep1={},killZone={},contestEqual={};
+    for(var e=0;e<enemies.length;e++){var en=enemies[e];for(var d in D){if(d===OPP[en.dir])continue;
+      var ax=en.x+D[d].x,ay=en.y+D[d].y,ek=K(ax,ay);
+      if(en.len>myLen)dangerStep1[ek]=true;
+      else if(en.len===myLen){dangerStep1[ek]=true;contestEqual[ek]=true;}
+      else killZone[ek]=true;}}
+
+    function inB(x,y){return x>=0&&y>=0&&x<W&&y<H;}
+    function passable(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k]){if(t&&tails[k])return true;return false;}return true;}
+    function floodSpace(sx,sy){if(!passable(sx,sy,true))return 0;var seen={},stk=[[sx,sy]],c=0,cap=W*H;while(stk.length&&c<cap){var cur=stk.pop(),cx=cur[0],cy=cur[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;c++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,nk=K(nx,ny);if(!seen[nk]&&passable(nx,ny,true))stk.push([nx,ny]);}}return c;}
+    function openNb(x,y){var n=0;for(var d in D){if(passable(x+D[d].x,y+D[d].y,true))n++;}return n;}
+
+    // ==== 核心搜索层：同时泛洪"我方+对手"，算每个食物的竞速领先 ==== 
+    var myDist={},foeDist={};
+    (function(){var q=[[head.x,head.y]],qi=0;myDist[K(head.x,head.y)]=0;
+      while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=myDist[K(cx,cy)];
+        for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||(blocked[k]&&!tails[k])||myDist[k]!=null)continue;myDist[k]=cd+1;q.push([nx,ny]);}}})();
+    (function(){var q=[],qi=0;
+      for(var k2=0;k2<enemies.length;k2++){var e=enemies[k2];if(!passable(e.x,e.y,true))continue;var ek=K(e.x,e.y);if(foeDist[ek]==null){foeDist[ek]=0;q.push([e.x,e.y]);}}
+      while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=foeDist[K(cx,cy)];
+        for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||(blocked[k]&&!tails[k])||foeDist[k]!=null)continue;foeDist[k]=cd+1;q.push([nx,ny]);}}})();
+
+    // 带first的BFS:知道每个可到达食物走哪个第一步
+    var seen={};seen[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;
+    var firstOf={};
+    while(qi<q.length){var nd=q[qi++];for(var dd in D){var nx=nd.x+D[dd].x,ny=nd.y+D[dd].y,nk=K(nx,ny);
+      if(seen[nk]||!passable(nx,ny,true))continue;if(nd.dist===0&&(dangerStep1[nk]))continue;
+      seen[nk]=true;var fd=nd.first||dd;firstOf[nk]={dir:fd,dist:nd.dist+1};q.push({x:nx,y:ny,first:fd,dist:nd.dist+1});}}
+
+    // ==== 搜索评分：对每个食物 = 价值×饥饿÷距离 × 领先加成 ====
+    var phase=myLen<8?'young':(myLen<=13?'grow':'mature');
+    var hpTier=myHp>=50?'healthy':(myHp>=25?'hungry':'critical');
+    var hungerBoost=myHp<55?(1+(55-myHp)/22):1;
+    var spaceThreshold=phase==='young'?(myLen+4):phase==='grow'?Math.ceil(myLen*1.3):Math.ceil(myLen*1.6);
+
+    var bestFood=null,bf=-1e9,dirAgg={up:0,down:0,left:0,right:0};
+    for(var f=0;f<state.foods.length;f++){
+      var fd=state.foods[f];if(fd.type==='spider')continue;
+      var info=firstOf[K(fd.x,fd.y)];if(!info)continue;
+      var dist=info.dist;
+      var val=fd.type==='peach'?100:40;
+      var fd2=foeDist[K(fd.x,fd.y)];
+      var lead=(fd2==null?6:(fd2-dist));          // 正=我先到，负=对手先到
+      var hb=hungerBoost;
+      // 核心搜索分 = 价值×饥饿 / (距离+1) × 领先强度
+      var fs=val*hb/(dist+0.5)*Math.max(0.4, 1+lead*0.25);
+      if(lead>0)dirAgg[info.dir]+=fs;              // 只累加领先食物(抢得到的)
+      if(fs>bf){bf=fs;bestFood={dir:info.dir,dist:dist,lead:lead,type:fd.type};}
+    }
+
+    // ==== 参数 ==== 
+    var P;
+    if(hpTier==='critical'){P={space:phase==='mature'?6:5,food:250,edge:phase==='mature'?10:3};}
+    else if(phase==='young'){P={space:3,food:hpTier==='healthy'?150:200,edge:2};}
+    else if(phase==='grow'){P={space:4,food:hpTier==='healthy'?130:180,edge:5};}
+    else{P={space:6,food:hpTier==='healthy'?85:130,edge:12};}
+    P.food=Math.round(P.food*hungerBoost);
+
+    // ==== 候选评分 ==== 
+    var cand=[];
+    for(var d in D){
+      if(d===OPP[self.dir])continue;
+      var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      var score=0;
+      var space=floodSpace(nx,ny);
+      score+=space*P.space;
+      if(space<spaceThreshold)score-=10000;
+      if(openNb(nx,ny)<=1)score-=180;
+      if(dangerStep1[nk]){var sa=openNb(nx,ny);score-=(contestEqual[nk]?700:600);if(sa<=2)score-=300;}
+      if(enemyBodyNear[nk])score-=80;
+
+      // 搜索驱动:方向聚合分(想吃所有这个方向上的食物) + 最优目标拉力
+      if(dirAgg[d]>0)score+=dirAgg[d]*0.5;
+      if(bestFood&&bestFood.dir===d){
+        score+=P.food-bestFood.dist*(hpTier==='critical'?0.3:(hpTier==='hungry'?0.6:1.0));
+      }
+
+      // 踩食物
+      var onFood=false,onSpider=false;
+      for(var ff=0;ff<state.foods.length;ff++){if(state.foods[ff].x===nx&&state.foods[ff].y===ny){if(state.foods[ff].type==='spider')onSpider=true;else onFood=true;}}
+      if(onFood&&!dangerStep1[nk])score+=P.food*0.8;
+      if(onSpider)score-=400;
+
+      // 踩更短蛇头
+      if(killZone[nk]&&space>=spaceThreshold)score+=70;
+
+      // 边缘
+      var ed=Math.min(nx,ny,W-1-nx,H-1-ny);
+      if(ed<=2){score-=(3-ed)*P.edge;}else if(phase!=='mature'){var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.4;}
+
+      cand.push({dir:d,score:score});
+    }
+    if(cand.length===0){var fb=self.dir,bsp=-1;for(var dz in D){if(dz===OPP[self.dir])continue;var sp=floodSpace(head.x+D[dz].x,head.y+D[dz].y);if(sp>bsp){bsp=sp;fb=dz;}}return fb;}
+    cand.sort(function(a,b){return b.score-a.score;});
+    return cand[0].dir;
+  },
+
+  // 🐲 宗师Grandmaster v3：全技能融合 + 智能残局渐开 + 头碰头/撞自己治理。Siege式相位机底座，
+  //   收编全谱系实战验证有效(★及以上)的招式，砍掉性价比低的(分断cut/2层minimax)与已淘汰的(三人格仲裁器)。
+  //   ▌智能残局渐开(核心创新)：endgameGain = maturityGate × snakeBoost
+  //     · maturityGate(成熟度主闸,一票否决发育期)：maturity<0.3锁死(嫩则强制不数地,优先发育)，>0.8全放。
+  //       maturity = 平均长度×0.55 + 回合进程×0.25 + 局部拥挤×0.20；foeLen取【全体对手平均】(方案A)。
+  //     · snakeBoost(蛇数加速器,越少越凶)：4蛇0.5 / 3蛇0.75 / 2蛇1.0。"成熟就能数地(不管蛇数)，蛇越少残局越凶"。
+  //   技能：A保命全套 + B觅食全套(含双源竞速+方向聚合) + C对抗全套 + D残局(squeeze/绝杀/长短门控/territory,无cut/minimax) + F架构全套。
+  //   ▌迭代史：v3(头碰头治理:硬红线尾连通/敌身近域-200/抢食危险折扣/竞速只奖稳赢/保守猎杀)→v3.1(方案A:成熟期softThreshold系数0.4→0.55治撞自己,
+  //     实测撞自己29→22✅但头碰头29→38❌死法转移)→【v3.2路线②】头碰头全程压制:等长对冲零容忍扩到全相位(equalPen混战1100/残局1300),
+  //     且"有安全退路时头碰头惩罚×1.6"(强推混战开阔区对冲,无退路不雪上加霜)。保住v3.1撞自己收益,专治那多出来的+9头碰头。
+  grandmaster: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    var OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var clamp01=function(v){return v<0?0:(v>1?1:v);};
+    var PM={
+      territW:2.0, squeezeW:5, killDeadW:500,
+      mcLeadW:7,
+      h2hHard:600, h2hEqual:880, h2hSoft:90,
+      killZoneW:55, mirrorW:0.7, centerW:0.4,
+      snake4:0.5, snake3:0.75, snake2:1.0,
+      matLo:0.3, matHi:0.8
+    };
+    var blocked={},tails={},enemies=[],enemyBodyNear={},foeLenSum=0;
+    for(var i=0;i<state.snakes.length;i++){
+      var s=state.snakes[i];if(!s.alive)continue;
+      for(var j=0;j<s.body.length;j++)blocked[K(s.body[j].x,s.body[j].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      if(s.id!==self.id){
+        enemies.push({x:s.body[0].x,y:s.body[0].y,len:s.length,dir:s.dir});
+        foeLenSum+=s.length;
+        for(var b=0;b<s.body.length;b++){for(var db in D){enemyBodyNear[K(s.body[b].x+D[db].x,s.body[b].y+D[db].y)]=true;}}
+      }
+    }
+    var aliveN=enemies.length+1;
+    var foe=enemies.length===1?enemies[0]:null;
+    var endgame=(enemies.length===1);
+    var dangerStep1={},killZone={},contestEqual={},foeStep2={};
+    for(var e=0;e<enemies.length;e++){var en=enemies[e];
+      for(var d in D){if(d===OPP[en.dir])continue;
+        var ax=en.x+D[d].x,ay=en.y+D[d].y,ek=K(ax,ay);
+        if(en.len>myLen)dangerStep1[ek]=true;
+        else if(en.len===myLen){dangerStep1[ek]=true;contestEqual[ek]=true;}
+        else killZone[ek]=true;
+        if(en.len>=myLen){for(var d2 in D){foeStep2[K(ax+D[d2].x,ay+D[d2].y)]=true;}}
+      }}
+    function inB(x,y){return x>=0&&y>=0&&x<W&&y<H;}
+    function passable(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k]){if(t&&tails[k])return true;return false;}return true;}
+    function floodSpace(sx,sy,extra){if(!passable(sx,sy,true))return 0;if(extra&&extra[K(sx,sy)])return 0;var seen={},stk=[[sx,sy]],c=0,cap=W*H;while(stk.length&&c<cap){var cur=stk.pop(),cx=cur[0],cy=cur[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;c++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,nk=K(nx,ny);if(!seen[nk]&&passable(nx,ny,true)&&!(extra&&extra[nk]))stk.push([nx,ny]);}}return c;}
+    function openNb(x,y){var n=0;for(var d in D){if(passable(x+D[d].x,y+D[d].y,true))n++;}return n;}
+    var selfBody={};for(var bi=0;bi<self.body.length;bi++)selfBody[K(self.body[bi].x,self.body[bi].y)]=true;
+    function tailReach(nx,ny){var tail=self.body[self.body.length-1],tk=K(tail.x,tail.y);var seen={},stk=[[nx,ny]];while(stk.length){var c=stk.pop(),cx=c[0],cy=c[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;if(ck===tk)return true;for(var d in D){var ax=cx+D[d].x,ay=cy+D[d].y,ak=K(ax,ay);if(!inB(ax,ay)||seen[ak])continue;if(blocked[ak]&&!selfBody[ak]&&!tails[ak])continue;stk.push([ax,ay]);}}return false;}
+    function enemySpace(en,extra){var best=0;for(var d in D){if(d===OPP[en.dir])continue;var nx=en.x+D[d].x,ny=en.y+D[d].y;if(!passable(nx,ny,true))continue;if(extra&&extra[K(nx,ny)])continue;var sp=floodSpace(nx,ny,extra);if(sp>best)best=sp;}return best;}
+    function nearestFoe(x,y){var m=99;for(var k=0;k<enemies.length;k++){var dd=Math.abs(enemies[k].x-x)+Math.abs(enemies[k].y-y);if(dd<m)m=dd;}return m;}
+    function foeToFood(fx,fy){var m=99;for(var k=0;k<enemies.length;k++){var dd=Math.abs(enemies[k].x-fx)+Math.abs(enemies[k].y-fy);if(dd<m)m=dd;}return m;}
+
+    var phase=myLen<8?'young':(myLen<=13?'grow':'mature');
+    var hpTier=myHp>=50?'healthy':(myHp>=25?'hungry':'critical');
+    var spaceThreshold=phase==='young'?(myLen+4):phase==='grow'?Math.ceil(myLen*1.3):Math.ceil(myLen*1.6);
+    // [方案A] 长身时加强空间前瞻:成熟期软门槛系数0.4→0.55,要求更大回旋余量,治"长身撞自己29%"。
+    //   young/grow 仍用0.4(不影响开局抢食),仅 mature 收紧——只动空间余量,不碰任何抢食权重。
+    var softThreshold=spaceThreshold+Math.ceil(myLen*(phase==='mature'?0.55:0.4));
+    var hungerBoost=myHp<55?(1+(55-myHp)/22):1;
+    var P;
+    if(hpTier==='critical'){P={space:phase==='mature'?6:4.5,food:260,edge:phase==='mature'?14:5};}
+    else if(phase==='young'){P=hpTier==='healthy'?{space:3,food:150,edge:3}:{space:3.5,food:200,edge:4};}
+    else if(phase==='grow'){P=hpTier==='healthy'?{space:4,food:130,edge:7}:{space:4.5,food:185,edge:8};}
+    else{P=hpTier==='healthy'?{space:6,food:90,edge:16}:{space:6.5,food:140,edge:16};}
+    P.food=Math.round(P.food*hungerBoost);
+
+    var eat=[];for(var ef=0;ef<state.foods.length;ef++){if(state.foods[ef].type!=='spider')eat.push(state.foods[ef]);}
+    var density=eat.length, crowd=0;
+    for(var ci=0;ci<enemies.length;ci++){var ee=enemies[ci];
+      if(Math.abs(ee.x-head.x)+Math.abs(ee.y-head.y)<=4)crowd+=2;}
+    for(var ek2 in enemyBodyNear){var pp=ek2.split(',');if(Math.abs(pp[0]-head.x)+Math.abs(pp[1]-head.y)<=3)crowd++;}
+    var caution=clamp01((crowd-2)/8);
+
+    var turn=state.turn||0, maxT=state.maxTurns||1000;
+    var foeLenAvg=enemies.length>0?(foeLenSum/enemies.length):0;
+    var avgLen=(myLen+foeLenAvg)/2;
+    var mLen=clamp01((avgLen-4)/9);
+    var mTurn=clamp01(turn/Math.min(260,maxT));
+    var mCrowd=clamp01(crowd/6);
+    var maturity=clamp01(mLen*0.55+mTurn*0.25+mCrowd*0.20);
+    var maturityGate=clamp01((maturity-PM.matLo)/(PM.matHi-PM.matLo));
+    var snakeBoost=aliveN>=4?PM.snake4:(aliveN===3?PM.snake3:PM.snake2);
+    var endgameGain=maturityGate*snakeBoost;
+    var hpGate=hpTier==='critical'?0.25:(hpTier==='hungry'?0.6:1.0);
+    endgameGain*=hpGate;
+    // [路线②] 头碰头全程压制(治混战头碰头40%):原 equalPen 只在2蛇残局生效,覆盖不了3-4蛇混战的开阔区对冲。
+    //   现扩展到全相位——只要存在"等长可同归于尽"的对冲格,一律零容忍(1100);残局更甚(1300)。
+    var equalPen=endgame?1300:1100;   // 等长对撞=纯亏死法,无论几蛇都重罚到几乎不可能选中
+    // 是否存在至少一个"安全方向"(非头碰头/非毒/空间够):有退路时才敢对头碰头加倍躲,无退路时不雪上加霜
+    var hasSafeAlt=false;
+    for(var sd in D){if(sd===OPP[self.dir])continue;var sx=head.x+D[sd].x,sy=head.y+D[sd].y,skk=K(sx,sy);
+      if(!passable(sx,sy,true))continue;if(dangerStep1[skk])continue;if(floodSpace(sx,sy)<spaceThreshold)continue;hasSafeAlt=true;break;}
+
+    var myDist={},foeDist={},firstOf={};
+    (function(){var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;myDist[K(head.x,head.y)]=0;
+      while(qi<q.length){var nd=q[qi++];for(var d in D){var nx=nd.x+D[d].x,ny=nd.y+D[d].y,k=K(nx,ny);
+        if(!inB(nx,ny)||(blocked[k]&&!tails[k])||myDist[k]!=null)continue;if(nd.dist===0&&dangerStep1[k])continue;
+        var fs=nd.first||d;myDist[k]=nd.dist+1;firstOf[k]={dir:fs,dist:nd.dist+1};q.push({x:nx,y:ny,first:fs,dist:nd.dist+1});}}})();
+    (function(){var q=[],qi=0;for(var k2=0;k2<enemies.length;k2++){var en=enemies[k2];if(!passable(en.x,en.y,true))continue;var ek=K(en.x,en.y);if(foeDist[ek]==null){foeDist[ek]=0;q.push([en.x,en.y]);}}
+      while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=foeDist[K(cx,cy)];
+        for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||(blocked[k]&&!tails[k])||foeDist[k]!=null)continue;foeDist[k]=cd+1;q.push([nx,ny]);}}})();
+
+    var dirAgg={up:0,down:0,left:0,right:0},bestFood=null,bf=-1e9;
+    for(var f=0;f<eat.length;f++){var fd=eat[f];var info=firstOf[K(fd.x,fd.y)];if(!info)continue;
+      var fd2=foeDist[K(fd.x,fd.y)];var lead=(fd2==null?6:(fd2-info.dist));
+      var val=(fd.type==='peach'?100:40);
+      var leadBoost=lead>=2?(1+lead*0.25):(lead===1?0.5:0.3);
+      var fs2=val*hungerBoost/(info.dist+0.5)*leadBoost;
+      if(lead>=2)dirAgg[info.dir]+=fs2;
+      if(fs2>bf){bf=fs2;bestFood={dir:info.dir,dist:info.dist,lead:lead,type:fd.type,fx:fd.x,fy:fd.y};}
+    }
+
+    var baseEnemySpace=(endgame&&endgameGain>0)?enemySpace(foe,null):0;
+
+    var cand=[];
+    for(var d in D){
+      if(d===OPP[self.dir])continue;
+      var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      var score=0;
+      var space=floodSpace(nx,ny);
+      score+=space*P.space;
+      if(space<spaceThreshold)score-=10000;
+      else if(space<softThreshold)score-=(softThreshold-space)*60;
+      if(!tailReach(nx,ny))score-=100000;
+      if(openNb(nx,ny)<=1)score-=200;
+      var isH2H=!!dangerStep1[nk];
+      if(dangerStep1[nk]){var sa=openNb(nx,ny);
+        var h2hPen=contestEqual[nk]?equalPen:PM.h2hHard;
+        // [路线②] 有安全退路时,头碰头惩罚×1.6(全程,不限残局)——强力推开"明明能躲却往敌头冲"的混战对冲;
+        //   无退路(hasSafeAlt=false)时维持原值,不雪上加霜(否则把唯一活路也否决=必死)。
+        if(hasSafeAlt)h2hPen*=1.6;
+        score-=h2hPen;
+        if(sa<=2)score-=300;}
+      else if(killZone[nk]){var sa2=openNb(nx,ny);if(sa2<=2||space<softThreshold)score-=150;}
+      if(enemyBodyNear[nk])score-=200;
+      if(foeStep2[nk]&&!dangerStep1[nk])score-=60;
+      var foodMul=isH2H?0.15:1;
+      if(dirAgg[d]>0)score+=dirAgg[d]*PM.mcLeadW*0.1*foodMul;
+      if(bestFood&&bestFood.dir===d){
+        var pull=P.food-bestFood.dist*(hpTier==='critical'?0.3:(hpTier==='hungry'?0.6:1.0));
+        var fdist=foeToFood(bestFood.fx,bestFood.fy);
+        if(fdist<=bestFood.dist && hpTier!=='critical') pull*=0.45;
+        score+=pull*foodMul;
+      }
+      var onFood=false,onSpider=false;
+      for(var ff=0;ff<state.foods.length;ff++){if(state.foods[ff].x===nx&&state.foods[ff].y===ny){if(state.foods[ff].type==='spider')onSpider=true;else onFood=true;}}
+      if(onFood&&!dangerStep1[nk])score+=P.food*0.8;
+      if(onSpider)score-=400;
+      if(killZone[nk]&&space>=softThreshold&&openNb(nx,ny)>=3){
+        var shorter=false;for(var kk=0;kk<enemies.length;kk++){var en2=enemies[kk];if(Math.abs(en2.x-nx)+Math.abs(en2.y-ny)===1&&myLen-en2.len>=2){shorter=true;break;}}
+        if(shorter)score+=PM.killZoneW;
+      }
+      if(foe&&myLen>foe.len)score+=(W-(Math.abs(nx-foe.x)+Math.abs(ny-foe.y)))*PM.mirrorW;
+      score+=(W-(Math.abs(nx-(W-1)/2)+Math.abs(ny-(H-1)/2)))*PM.centerW*(hpTier==='critical'?0.3:1);
+      var ed=Math.min(nx,ny,W-1-nx,H-1-ny);
+      if(ed<=2){score-=(3-ed)*P.edge;}else if(phase!=='mature'){var cd=Math.abs(nx-W/2)+Math.abs(ny-H/2);score-=cd*0.4;}
+      if(endgame && space>=softThreshold && endgameGain>0){
+        var extra={};extra[nk]=true;
+        var enSp=enemySpace(foe,extra);
+        var squeeze=baseEnemySpace-enSp;
+        var advantage=space-enSp;
+        if(myLen>=foe.len){
+          score+=advantage*PM.territW*endgameGain;
+          if(squeeze>0)score+=squeeze*PM.squeezeW*endgameGain;
+          if(enSp>0&&enSp<foe.len*1.1)score+=PM.killDeadW*endgameGain;
+        }else{
+          score-=advantage*PM.territW*endgameGain;
+          if(squeeze>0)score-=squeeze*PM.squeezeW*endgameGain;
+        }
+      }
+      if(d===self.dir)score-=4;
+      cand.push({dir:d,score:score});
+    }
+    if(cand.length===0){var fb2=self.dir,bsp=-1;for(var dz in D){if(dz===OPP[self.dir])continue;var sp=floodSpace(head.x+D[dz].x,head.y+D[dz].y);if(sp>bsp){bsp=sp;fb2=dz;}}return fb2;}
+    cand.sort(function(a,b){return b.score-a.score;});
+    return cand[0].dir;
+  },
+
+
+  // 🏯 弈(旧版·保留)：原 genesisGoSagePro，含完整 6 层架构。保留作技术参照，已被新版取代。
+  // 🏯 棋圣Ω·弈 v3(GoSagePro·重生版)：在预简化版代码上精准施加 6 处修正，
+  //   保留 W_avoid/fp1v1/门控multiBFS 原架构。修正：foodBase 54→130、砍fsm survive、
+  //   fsmFood去0.7折、avoidScale封顶0.15、踩食70/30→60/30、fsmSafe去survive加成：① foodBase 54→130(基础抢食力×2.4) ② 砍掉fsm survive模式(拥挤时不再自削吃欲)
+  //   防守底座+围棋大脑原封不动。设计信念：只修矛盾，不动架构。(头碰头硬闸/尾连通/空间不足否决)+成熟度驱动丝滑过渡+围棋大脑足本(territory/cut/minimax/squeeze)。
   genesisGoSagePro: function(state){
     var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
     var myLen=self.length,myHp=self.hp,myDir=self.dir,myBody=self.body;
     var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},OPP={up:'down',down:'up',left:'right',right:'left'};
     var K=function(x,y){return x+','+y;};
     var PM={ R:3, safeW:1.2, crowdGain:0.07, crowdMax:1.9, aggrBase:1.0, dGain:0.30,
-      suppress:0.4, h2hPen:120, h2hSoftPen:35, foodBase:54, hungerFood:150,
+      suppress:0.4, h2hPen:120, h2hSoftPen:35, foodBase:130, hungerFood:150,
       centerW:0.5, siegeW:1.6, blockW:5, antiPredict:6,
       // 围棋式残局参数
       territW:2.2, cutW:30, lookahead:1.0,
@@ -1682,7 +2102,315 @@ const BUILTIN_AIS = {
     for(var ci=0;ci<enemies.length;ci++){var ee=enemies[ci];for(var bb=0;bb<ee.body.length;bb++){var c=ee.body[bb];if(Math.abs(c.x-head.x)+Math.abs(c.y-head.y)<=PM.R)crowd++;}
       if(Math.abs(ee.x-head.x)+Math.abs(ee.y-head.y)<=PM.R+1)crowd+=2;}
     var lowHp=myHp<65,critHp=myHp<25,highHp=myHp>70;   // ④ 急食阈值前移 55→65：更早积极觅食，别等快饿死
-    var aggr=PM.aggrBase+density*PM.dGain+(lowHp?0.8:0)-(highHp?0.3:0);
+    // [改进一] 续命斜坡(替代原 lowHp?0.8 阶跃)：填平 25~65 温水区，HP越低越陡。借鉴围猎hungerBoost思想但复用aggr、不新增乘子。
+    //   HP65→0, 45→0.5, 25→1.0(连续)。aggr 仍受下方 2.4 封顶兜底，天然防过贪。系数/40 可调：饿死多→/30更陡，过贪→/50更缓。
+    var hpBoost = myHp<65 ? (65-myHp)/40 : 0;
+    var aggr=PM.aggrBase+density*PM.dGain+hpBoost-(highHp?0.3:0);   // [回滚路线A-①] 去掉缺食加成项(实测误判毒海致退化)，恢复减半版；缺食凶抢改由 STARVE 模式负责
+    if(aggr<0.3)aggr=0.3;if(aggr>2.4)aggr=2.4;
+    var caution=1+crowd*PM.crowdGain;if(caution>PM.crowdMax)caution=PM.crowdMax;
+    caution+=persona*0.15;if(caution>PM.crowdMax+0.3)caution=PM.crowdMax+0.3;
+    var fsm=critHp?'starve':(endgame&&myLen>=foe.len?'hunt':'forage');
+    var fsmSafe=(fsm==='hunt')?0.9:1.0;
+    var fsmFood=(fsm==='starve')?1.8:1.0;
+    var inB=function(x,y){return x>=0&&y>=0&&x<W&&y<H;};
+    var passable=function(x,y,t){if(!inB(x,y))return false;var k=K(x,y);if(blocked[k])return t&&tails[k];return true;};
+    var flood=function(sx,sy){if(!passable(sx,sy,true))return 0;var seen={};var stk=[[sx,sy]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y;if(!seen[K(nx,ny)]&&passable(nx,ny,true))stk.push([nx,ny]);}}return n;};
+    var openNb=function(x,y){var n=0;for(var d in D)if(passable(x+D[d].x,y+D[d].y,true))n++;return n;};
+    var tailConn=function(nx,ny,ef){var nb,nt;if(ef){nb=[{x:nx,y:ny}].concat(myBody);nt=myBody[myBody.length-1];}else{nb=[{x:nx,y:ny}].concat(myBody.slice(0,-1));nt=myBody[myBody.length-2];}
+      if(!nt)return true;var ntK=K(nt.x,nt.y);var sb={};for(var i=0;i<nb.length-1;i++)sb[K(nb[i].x,nb[i].y)]=true;
+      var seen={};var stk=[[nx,ny]];while(stk.length){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;if(ck===ntK)return true;
+        for(var d in D){var ax=cx+D[d].x,ay=cy+D[d].y,ak=K(ax,ay);if(!inB(ax,ay)||seen[ak])continue;if(blocked[ak]&&!selfSet[ak])continue;if(sb[ak])continue;stk.push([ax,ay]);}}return false;};
+    var enemyReach=function(extra){if(!foe)return 0;var seen={};var stk=[[foe.x,foe.y]];var n=0;while(stk.length&&n<W*H){var t=stk.pop(),cx=t[0],cy=t[1],ck=K(cx,cy);if(seen[ck])continue;seen[ck]=true;n++;for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(seen[k])continue;if(!inB(nx,ny))continue;if(blocked[k]&&!tails[k])continue;if(extra&&extra[k])continue;stk.push([nx,ny]);}}return n;};
+    var nearestFoe=function(x,y){var m=99;for(var k=0;k<enemies.length;k++){var dd=Math.abs(enemies[k].x-x)+Math.abs(enemies[k].y-y);if(dd<m)m=dd;}return m;};
+    var cx0=(W-1)/2,cy0=(H-1)/2;
+
+    // ====== 阶段门控（成熟度驱动的丝滑过渡）======
+    //   核心：是否开"围棋残局大脑"不只看"是否1v1"，还要看"局面成熟度 maturity"。
+    //   maturity=0(开局/双方都短/地图空) → 即使 1v1 也先发育抢食，不数地；
+    //   maturity→1(双方长大/回合推进/地图变挤) → 围棋大脑平滑全开收割。
+    //   这样"开局就1v1"和"4→3→2递减"都走同一套连续逻辑，无断崖。
+    var clamp01=function(v){ return v<0?0:(v>1?1:v); };
+    var turn = state.turn||0, maxT = state.maxTurns||1000;
+    var foeLen = foe ? foe.len : 0;
+    var avgLen = (myLen + foeLen)/2;
+    // 三个成熟度信号(各0~1)：双方平均长度、对局进程、局部拥挤度
+    var mLen   = clamp01((avgLen - 4)/9);       // 长度4→0, 13→1
+    var mTurn  = clamp01(turn/Math.min(260, maxT)); // 回合推进
+    var mCrowd = clamp01(crowd/6);              // 周围越挤越成熟(逼近残局缠斗)
+    // 综合成熟度：长度为主(0.55) + 回合(0.25) + 拥挤(0.20)
+    var maturity = clamp01(mLen*0.55 + mTurn*0.25 + mCrowd*0.20);
+
+    var multiSnake = aliveN>=3;   // 多蛇期：四合一混战增强生效
+    var isEndgameRaw = endgame && myLen>=foe.len;   // 物理上1v1且我不弱(原 ENDGAME 条件)
+
+    // [重生版v4] 废除人格仲裁器，回归原版弈的连续权重体系。
+    //   不再做 STARVE/SIEGE/BRAWL 硬切换——endgameGain 由 maturity×hpGate 连续决定，
+    //   gFood/gCenter/gSafe 由 phase 门控，觅食/保命/数地自然过渡，不分裂人格。
+    // 阶段名(用于离散权重 gCenter/gSafe 等)：1v1 但未成熟(maturity<0.5)仍按 OPENING/MIDGAME 发育
+    var phase = (critHp || crowd>=8) ? 'SURVIVAL'
+              : (isEndgameRaw && maturity>=0.5) ? 'ENDGAME'        // ← 必须"成熟"才进收官
+              : (myLen<8 || (myHp>60 && density>=3)) ? 'OPENING'   // ← 去掉 !endgame：1v1 开局也能进发育
+              : 'MIDGAME';
+    // endgameGain：围棋大脑总开关，改为"是否1v1 × 成熟度"连续渐开(不再硬跳1.0)
+    //   开局1v1 maturity≈0 → 几乎不开，先发育；长大后平滑升到1全功率围杀。
+    var endgameGain = isEndgameRaw ? maturity : (phase==='MIDGAME' && !multiSnake ? 0.15*maturity : 0.0);
+    // HP 让步：1v1 时血不够就把"围棋占地"调暗，先去抢食活命(治"忙着数地、食物被对手抢光饿死")
+    //   critHp→围棋几乎关(0.25)；lowHp→减半。吃饱了(HP高)才全功率围杀。
+    var hpGate = critHp ? 0.25 : (lowHp ? 0.5 : 1.0);
+    endgameGain *= hpGate;
+    // 围棋大脑连续渐开：endgameGain 已由上方 maturity×hpGate 决定，不做硬切。
+    // gFood：发育期猛抢；1v1 收官随 maturity 在 1.2(早期仍抢)↔0.7(成熟收官) 间平滑过渡，不再一进1v1就打7折
+    var gFood;
+    if(phase==='SURVIVAL') gFood = critHp?1.6:0.8;
+    else if(phase==='OPENING') gFood = 1.35;
+    else if(isEndgameRaw) gFood = (lowHp?1.5:1.2) - maturity*(lowHp?0.2:0.5);   // 1v1低血抢食地板抬高(1.5→1.3)，别因成熟度跌到0.7
+    else gFood = 1.0;
+    // gFood 由 phase 门控自然调节(OPENING=1.35, SURVIVAL=critHp?1.6:0.8)，不再硬拉。
+    var gCenter = phase==='OPENING'?1.1  : phase==='ENDGAME'?0.5 : phase==='SURVIVAL'?0.3 : 1.0;
+    // gCenter 由 phase 门控决定，不再因缺食模式打折。
+    var gSafe   = phase==='SURVIVAL'?1.6 : 1.0;
+
+    // ====== ①④ 多源 BFS 势力图：从我头 + 所有对手头同时泛洪，每格记"我距离"与"最近对手距离" ======
+    //   用于：每个食物算"我到达 - 最近对手到达"的领先步数(lead)；lead>0 我先到。
+    var myDist={}, foeDist={};
+    var multiBFS=function(){
+      // 我方单源
+      (function(){ var q=[[head.x,head.y]],qi=0; myDist[K(head.x,head.y)]=0;
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=myDist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||(blocked[k]&&!tails[k])||myDist[k]!=null)continue;myDist[k]=cd+1;q.push([nx,ny]);}}})();
+      // 对手多源(所有敌头同时入队，得每格"最近对手距离")
+      (function(){ var q=[],qi=0; for(var k2=0;k2<enemies.length;k2++){var e=enemies[k2];var ek=K(e.x,e.y);if(foeDist[ek]==null){foeDist[ek]=0;q.push([e.x,e.y]);}}
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=foeDist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||(blocked[k]&&!tails[k])||foeDist[k]!=null)continue;foeDist[k]=cd+1;q.push([nx,ny]);}}})();
+    };
+    if(multiSnake && eat.length) multiBFS();       // 门控:多蛇期才跑多源BFS：1v1 也用多源 BFS(单敌时自动退化为单目标)，以统一觅食、删除 fp1v1
+    // 多目标抢食：复用我方带 first 的 BFS，对【所有我领先(lead>0)的食物】按方向聚合分数，
+    // 而非只盯单一最优目标——避免唯一目标方向被苟/避碰信号盖掉时整盘不抢食。
+    var mcTarget=null, mcBest=-1e9;     // 仍保留"最优单目标"用于参考(主目标加成)
+    var mcDirScore={up:0,down:0,left:0,right:0};   // ③ 每个方向的多目标抢食累计分
+    if(multiSnake && eat.length){   // 门控:多蛇期多源势力图觅食
+      // 带 first 的我方 BFS
+      var seen={};seen[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;
+      var firstOf={};
+      while(qi<q.length){var nd=q[qi++];for(var dd in D){var nx=nd.x+D[dd].x,ny=nd.y+D[dd].y,nk=K(nx,ny);
+        if(seen[nk]||!passable(nx,ny,true))continue;if(nd.dist===0&&(h2hHard[nk]||poison[nk]))continue;
+        seen[nk]=true;var fd=nd.first||dd;firstOf[nk]={dir:fd,dist:nd.dist+1};q.push({x:nx,y:ny,first:fd,dist:nd.dist+1});}}
+      eat.forEach(function(f){var fk=K(f.x,f.y);var info=firstOf[fk];if(!info)return;
+        var fd2=foeDist[fk]; var lead = (fd2==null? 6 : (fd2 - info.dist));   // 对手到不了→我大优(给+6)
+        var typeV=(f.type==='peach'?1.6:1.0);
+        var score = lead*typeV - info.dist*0.4;   // 领先越多、越近、价值越高越想抢
+        if(score>mcBest){mcBest=score;mcTarget={dir:info.dir,dist:info.dist,lead:lead,type:f.type};}
+        // ③ 多目标：只对"我领先(lead>0)"的食物给方向加分，按距离递减(近的权重高)
+        if(lead>0){
+          var contribute = lead*typeV/(info.dist+1);   // 领先×价值÷(距离+1)，越近贡献越大
+          if(mcDirScore[info.dir]!=null) mcDirScore[info.dir]+=contribute;
+        }
+      });
+    }
+
+    // 非多蛇期(1v1/仅2条)的 BFS 食物路径，循环外算一次
+    var fp1v1=null;
+    if(!multiSnake && eat.length){
+      var goalF={};eat.forEach(function(f){goalF[K(f.x,f.y)]=f.type;});var seenF={};seenF[K(head.x,head.y)]=true;var qF=[{x:head.x,y:head.y,first:null,dist:0}],qiF=0;
+      while(qiF<qF.length){var nd=qF[qiF++];for(var dd in D){var nx2=nd.x+D[dd].x,ny2=nd.y+D[dd].y,nk2=K(nx2,ny2);if(seenF[nk2]||!passable(nx2,ny2,true))continue;if(nd.dist===0&&(h2hHard[nk2]||poison[nk2]))continue;seenF[nk2]=true;var fd3=nd.first||dd;
+        if(goalF[nk2]&&!poison[nk2]){fp1v1={dir:fd3,dist:nd.dist+1,type:goalF[nk2]};break;}qF.push({x:nx2,y:ny2,first:fd3,dist:nd.dist+1});}if(fp1v1)break;}
+    }
+
+    // ====== 围棋式残局工具(决赛圈用，原样保留) ======
+    var territory=function(myH, foeH, blk){
+      var distM={}, distF={};
+      (function(src,dist){ var q=[src],qi=0; dist[K(src[0],src[1])]=0;
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=dist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||blk[k]||dist[k]!=null)continue;dist[k]=cd+1;q.push([nx,ny]);}}})(myH,distM);
+      (function(src,dist){ var q=[src],qi=0; dist[K(src[0],src[1])]=0;
+        while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=dist[K(cx,cy)];
+          for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||blk[k]||dist[k]!=null)continue;dist[k]=cd+1;q.push([nx,ny]);}}})(foeH,distF);
+      var mine=0,foeC=0,foeCells={};
+      for(var x=0;x<W;x++)for(var y=0;y<H;y++){var k=K(x,y);if(blk[k])continue;
+        var dm=distM[k],df=distF[k];
+        if(dm==null&&df==null)continue;
+        if(df==null||(dm!=null&&dm<df))mine++;
+        else if(dm==null||df<dm){foeC++;foeCells[k]=true;}
+      }
+      var cuts=0,vis={};
+      for(var fk in foeCells){ if(vis[fk])continue; cuts++; var stk=[fk.split(',').map(Number)];vis[fk]=true;
+        while(stk.length){var c=stk.pop();for(var d in D){var nx=c[0]+D[d].x,ny=c[1]+D[d].y,nk=K(nx,ny);if(foeCells[nk]&&!vis[nk]){vis[nk]=true;stk.push([nx,ny]);}}}}
+      return {mine:mine, foe:foeC, cuts:cuts};
+    };
+    var evalEnd=function(myH, foeH, blk){ var t=territory(myH, foeH, blk); return (t.mine - t.foe)*PM.territW + t.cuts*PM.cutW; };
+    // [简化1] 原 fp1v1 单目标 BFS 已删除——1v1 觅食统一由上方多源势力图(mcTarget/mcDirScore)提供。
+    var minimaxEnd=function(myNx,myNy,blk0){
+      var blk1={}; for(var k in blk0)blk1[k]=true; blk1[K(myNx,myNy)]=true;
+      var worst=1e9, any=false;
+      for(var d in D){ if(d===OPP[foe.dir])continue;
+        var fx=foe.x+D[d].x, fy=foe.y+D[d].y, fk=K(fx,fy);
+        if(!inB(fx,fy)||blk1[fk])continue;
+        any=true;
+        var blk2={}; for(var k2 in blk1)blk2[k2]=true; blk2[fk]=true;
+        var v=evalEnd([myNx,myNy],[fx,fy],blk2);
+        if(v<worst)worst=v;
+      }
+      if(!any) return 9999;
+      return worst;
+    };
+
+    // [性能] squeeze 绞杀的对手基线空间在循环外只算一次(每方向相同)，循环内只算"加我方新头后"的一次。仅 SIEGE 残局需要。
+    var foeSpaceBase = (foe) ? enemyReach(null) : 0;
+    var cand=[];
+    for(var d in D){if(d===OPP[myDir])continue;var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
+      if(!passable(nx,ny,true))continue;
+      if(poison[nk]&&!(critHp&&aggr>1.8))continue;
+      var sc=0;
+      if(!tailConn(nx,ny,false)||!tailConn(nx,ny,true))sc-=100000;
+      var sp=flood(nx,ny);
+      sc+=sp*(W_safe+caution*0.4)*fsmSafe*gSafe;
+      if(sp<myLen)sc-=(myLen-sp)*180*(1+persona*0.3);
+      if(sp<myLen*0.5)sc-=2500;
+      // [改进二] 相位化空间软门槛(借鉴围猎相位阈值)：身子越长/越成熟，要求的回旋空间越大，防长身后自困。
+      //   复用 maturity(只读)，系数 1.15(发育鼓励钻缝)→1.6(成熟留大回旋)。只罚 [myLen, myLen×系数) 的"够活命但不宽裕"中间带，
+      //   与上面 sp<myLen 硬罚不重叠；sp 充足(>=spaceFloor)则完全不触发，与原行为逐位一致。权重90温和，自困多→升120，变缩头→降60。
+      var spaceFloor = myLen*(1.15 + maturity*0.45);
+      if(sp>=myLen && sp<spaceFloor){ var tight=(spaceFloor-sp)/spaceFloor; sc-=tight*50*(1+persona*0.4); }   // 权重90→50：90太重压得不敢钻缝抢食(高危少食/均衡偏低)，减半找回进攻
+      if(openNb(nx,ny)<=1)sc-=160*caution;
+      // 头碰头：硬危险重罚；软危险默认躲，但③多蛇期我明显更长+落点安全则反转为"主动吃"奖励
+      if(h2hHard[nk])sc-=W_h2h*caution;
+      else if(h2hSoft[nk]){
+        if(multiSnake && killHeads[nk] && sp>=myLen) sc+=PM.mcKillW;   // ③ 主动撞短蛇清场
+        else sc-=W_h2hSoft*caution;
+      }
+      // [简化1] 觅食统一：1v1 与多蛇共用多源势力图(mcDirScore/mcTarget)。1v1 专属调参(hunger1v1/cautEff/tb/W_food)
+      //   通过 !multiSnake 分支保留，行为与原 fp1v1 等价——只是删掉了那套独立 BFS，不改 1v1 觅食强度。
+      {
+        // ③ 多目标抢食：对所有"我领先"的食物按方向累计分(不再只认单一目标)
+        if(mcDirScore[d]>0) sc += mcDirScore[d]*PM.mcLeadW*gFood;
+
+        // ①④ 主目标额外加成 + 抢食基础拉力
+        if(mcTarget && mcTarget.dir===d){
+          var lead=mcTarget.lead;
+          if(lead>0) sc += lead*PM.mcLeadW*0.5*(mcTarget.type==='peach'?1.3:1.0)*gFood;  // 主目标额外半权加成
+          else sc -= (-lead)*PM.mcLoseW;   // 抢不赢→轻罚(别去送命)
+          if(multiSnake){
+            var fb2=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.4:PM.foodBase);
+            sc += fb2*aggr/Math.pow(caution,PM.suppress)*fsmFood*gFood - mcTarget.dist*1.0;
+          }else{
+            // 1v1 专属抢食拉力(原 fp1v1 调参原样移植)：饥饿放大 hunger1v1 + 低血拥挤抑制封顶 cautEff + 桃加成 tb + W_food
+            var fbase=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.6:PM.foodBase);
+            var tb=mcTarget.type==='peach'?1.4:1.0;
+            var hunger1v1=critHp?2.2:(lowHp?1.6:(myHp<80?1.15:1.0));
+            var cautEff=lowHp?Math.min(caution,1.15):caution;
+            sc += fbase*aggr/Math.pow(cautEff,PM.suppress)*fsmFood*tb*W_food*gFood*hunger1v1 - mcTarget.dist*1.2;
+          }
+        }
+        // ② 苟：远离蛇群——"吃饱了才苟"，按血量渐进(HP>70不苟/55~70升/低血降/濒死全力抢)。仅多蛇期 且 非STARVE(极缺时玩命抢,不苟)
+        if(multiSnake){
+          // [新版修正] avoidScale 封顶0.2：旧版在HP55时尖峰到1.0，导致"半血时极端苟"的反直觉行为
+          //   新版只留轻微远离倾向，不再压制抢食欲望。critHp时仍关闭(全力抢)。
+          var avoidScale = critHp ? 0 : 0.15;
+          if(avoidScale>0) sc += nearestFoe(nx,ny)*PM.mcAvoidW*avoidScale;
+        }
+      }
+      // [简化3] "临门一脚"即时奖励：落点正好是食物时给一笔奖励。原值(70/30 × fsmFood × W_food × gFood)与上方势力图
+      //   mcDirScore/mcTarget 抢食拉力重叠(同口食物算两遍)。这里保留"一步到嘴"语义但降权(40/18)、去掉与势力图重复的
+      //   gFood/W_food 缩放——方向拉力已由势力图负责，本段只做"就差这一步"的临门补刀。低血时×1.5保命急食仍保留。
+      for(var fi=0;fi<eat.length;fi++){if(eat[fi].x===nx&&eat[fi].y===ny){sc+=(eat[fi].type==='peach'?60:30)*fsmFood*(lowHp?1.5:1)*W_food*gFood;break;}}
+      sc+=(W-(Math.abs(nx-cx0)+Math.abs(ny-cy0)))*W_center*(critHp?0.3:1)*gCenter;
+      if(W_avoid>0 && !multiSnake)sc+=nearestFoe(nx,ny)*3*W_avoid;
+      // [成熟期边缘惩罚] 借 FSM/围猎成熟期 edge 思路，治"长身贴最外墙被平行墙绞杀"(蟠桃14%崩盘的根因)。
+      //   ed=到最近墙距离；身越长(maturity高)越怕贴墙：ed<=2 时按 (3-ed) 阶梯重罚，并乘 maturity——幼年/开阔(ed>=3)完全不罚，
+      //   不影响毒海/正常局；只在长身贴边时把弈往里赶，从源头不给对手平行绞杀的机会。STARVE 急食时减半(别为躲墙饿死)。
+      var ed=Math.min(nx,ny,W-1-nx,H-1-ny);
+      if(ed<=2){
+        var edgePen=(3-ed)*16*maturity*(1+persona*0.3);   // 蛇多(persona)更怕被夹，罚更重
+        if(critHp) edgePen*=0.5;                           // 濒死时弱化，优先活命
+        sc-=edgePen;
+      }
+      // [简化2] 删除旧 W_avoid 远离逻辑：与多蛇期 avoidScale 功能重叠(原注释已标"避免和②重复")，1v1远离需求弱，统一用 avoidScale。
+      if(foe&&myLen>foe.len)sc+=(W-(Math.abs(nx-foe.x)+Math.abs(ny-foe.y)))*0.7*(phase==='ENDGAME'?1.2:1);
+      // ====== 围棋式残局博弈：仅决赛圈(1v1)全功率 ======
+      if(endgame && sp>=myLen && endgameGain>0){
+        var blkS={}; for(var bk in blocked)blkS[bk]=true; blkS[nk]=true;
+        var tr=territory([nx,ny],[foe.x,foe.y],blkS);
+        var foeRatio = tr.foe/(tr.mine+tr.foe+1);
+        var wStatic  = 0.6 + (1-foeRatio)*0.8;
+        var wLook    = 0.4 + foeRatio*0.9;
+        sc += (tr.mine - tr.foe)*PM.territW*wStatic*endgameGain;
+        sc += tr.cuts*PM.cutW*endgameGain;
+        if(tr.foe>0 && tr.foe < foe.len*1.1) sc += 500*endgameGain;
+        sc += minimaxEnd(nx, ny, blocked)*PM.lookahead*wLook*endgameGain;
+        // [改进三] 残局反封锁下限(克制围猎squeeze)：复用已算的 tr/sp，零额外开销。
+        //   gate: 仅"我领地不占优(tr.mine<=tr.foe)"时才往大空间撤，避免和上面 +500 绝杀对冲(我占优正在收网时不撤)。
+        //   被压到 sp<myLen*1.6 时按缩减程度扣分引导撤退；乘 endgameGain 继承成熟度/hpGate(低血时弱化,优先抢食活命)。权重100，被压死→150，缩头→60。
+        if(tr.mine <= tr.foe && sp < myLen*1.6){ var shrink=(myLen*1.6 - sp)/(myLen*1.6); sc -= shrink*50*endgameGain; }
+        // ====== [主动 squeeze 绞杀] 移植围猎的"封口"杀手锏：弈不只数地，还主动压缩对手活路 ======
+        //   复用已有 enemyReach(extra)(从对手头泛洪、可传我方新头作障碍)=围猎 enemySpace 等价物，零新算子。
+        //   gate: 仅"我占优(tr.mine>tr.foe)且更长且自身安全(sp>=myLen)"时才出击绞杀——与上面反封锁(tr.mine<=tr.foe才撤)严格互斥，
+        //   不占优时撤、占优时压，攻守按"谁占优"切换，绝不同步打架，也绝不为绞杀牺牲生存(围猎同哲学)。
+        if(sp>=myLen && myLen>=foe.len && tr.mine>tr.foe){
+          var ex={}; ex[nk]=true;                       // 我方新头当障碍
+          var foeSpaceAfter = enemyReach(ex);           // 我走这步后对手剩余空间
+          var squeeze = foeSpaceBase - foeSpaceAfter;   // 这一步压缩了对手多少空间(基线循环外已算)
+          if(squeeze>0) sc += squeeze*6*endgameGain;    // 主动封口奖励(越能压缩越想走)
+          if(foeSpaceAfter>0 && foeSpaceAfter < foe.len*1.2) sc += 600*endgameGain;  // 把对手压进比其体长还小的死空间→近绝杀,重奖(对标围猎+450,弈更狠一点)
+        }
+      }
+      if(d===myDir)sc-=PM.antiPredict;
+      cand.push({dir:d,score:sc});
+    }
+    if(!cand.length){var bd=myDir,ms=-1;for(var dz in D){if(dz===OPP[myDir])continue;var s2=flood(head.x+D[dz].x,head.y+D[dz].y);if(s2>ms){ms=s2;bd=dz;}}return bd;}
+    cand.sort(function(a,b){return b.score-a.score;});return cand[0].dir;
+  },
+
+
+  //   旧版问题：多蛇期食物权重不足(foodBase=54)、fsm survive模式反直觉减吃、avoidScale在HP55尖峰不合理的苟等。
+  genesisGoSageLegacy: function(state){
+    var W=state.gridWidth,H=state.gridHeight,self=state.self,head=self.head;
+    var myLen=self.length,myHp=self.hp,myDir=self.dir,myBody=self.body;
+    var D={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}},OPP={up:'down',down:'up',left:'right',right:'left'};
+    var K=function(x,y){return x+','+y;};
+    var PM={ R:3, safeW:1.2, crowdGain:0.07, crowdMax:1.9, aggrBase:1.0, dGain:0.30,
+      suppress:0.4, h2hPen:120, h2hSoftPen:35, foodBase:54, hungerFood:150,
+      centerW:0.5, siegeW:1.6, blockW:5, antiPredict:6,
+      // 围棋式残局参数
+      territW:2.2, cutW:30, lookahead:1.0,
+      // —— 四合一混战增强参数 ——
+      mcLeadW:9,      // ①④ 多源势力图抢食：食物"到达领先步数"权重(领先越多越想抢)
+      mcLoseW:4,      // 抢不赢的食物降权惩罚(避免做无用功送命)
+      mcAvoidW:4,     // ② 苟：远离蛇群扎堆区权重(蛇数≥3时)
+      mcKillW:55,     // ③ 主动头碰头吃短蛇：明显更长+落点安全时的清场奖励
+      mcKillLenGap:2  // 判定"明显更长"的长度差阈值
+    };
+    var blocked={},selfSet={},tails={},enemies=[];
+    for(var j=0;j<myBody.length;j++){var p=myBody[j];blocked[K(p.x,p.y)]=true;selfSet[K(p.x,p.y)]=true;}
+    tails[K(myBody[myBody.length-1].x,myBody[myBody.length-1].y)]=true;
+    for(var i=0;i<state.snakes.length;i++){var s=state.snakes[i];if(!s.alive||s.id===self.id)continue;
+      for(var b=0;b<s.body.length;b++)blocked[K(s.body[b].x,s.body[b].y)]=true;
+      var tl=s.body[s.body.length-1];tails[K(tl.x,tl.y)]=true;
+      enemies.push({x:s.head.x,y:s.head.y,len:s.length,dir:s.dir,body:s.body});}
+    var foe=enemies.length===1?enemies[0]:null, endgame=!!foe;
+    var aliveN=enemies.length+1;
+    var persona = aliveN<=2?0 : aliveN>=4?1 : 0.5;
+    var W_safe   = PM.safeW*(1+persona*0.4);
+    var W_food   = 1+persona*0.10;
+    var W_h2h    = PM.h2hPen*(1+persona*0.8);
+    var W_h2hSoft= PM.h2hSoftPen*(1+persona*0.6);
+    var W_center = PM.centerW*(1-persona*0.4);
+    // [简化2] W_avoid 已随旧远离逻辑一并删除(远离统一由多蛇期 avoidScale 负责)
+    // 头碰头双级 + 记录"更短可吃"的对手蛇头格(供③主动吃)
+    var h2hHard={},h2hSoft={},killHeads={};
+    for(var ei=0;ei<enemies.length;ei++){var e=enemies[ei];for(var d in D){if(d===OPP[e.dir])continue;var hk=K(e.x+D[d].x,e.y+D[d].y);
+      if(e.len>=myLen)h2hHard[hk]=true;
+      else { h2hSoft[hk]=true; if(myLen-e.len>=PM.mcKillLenGap) killHeads[hk]=true; } }}
+    var foods=state.foods||[];
+    var eat=foods.filter(function(f){return f.type!=='spider';});
+    var poison={};foods.forEach(function(f){if(f.type==='spider')poison[K(f.x,f.y)]=true;});
+    var density=eat.length, crowd=0;
+    for(var ci=0;ci<enemies.length;ci++){var ee=enemies[ci];for(var bb=0;bb<ee.body.length;bb++){var c=ee.body[bb];if(Math.abs(c.x-head.x)+Math.abs(c.y-head.y)<=PM.R)crowd++;}
+      if(Math.abs(ee.x-head.x)+Math.abs(ee.y-head.y)<=PM.R+1)crowd+=2;}
+    var lowHp=myHp<65,critHp=myHp<25,highHp=myHp>70;   // ④ 急食阈值前移 55→65：更早积极觅食，别等快饿死
+    // [改进一] 续命斜坡(替代原 lowHp?0.8 阶跃)：填平 25~65 温水区，HP越低越陡。借鉴围猎hungerBoost思想但复用aggr、不新增乘子。
+    //   HP65→0, 45→0.5, 25→1.0(连续)。aggr 仍受下方 2.4 封顶兜底，天然防过贪。系数/40 可调：饿死多→/30更陡，过贪→/50更缓。
+    var hpBoost = myHp<65 ? (65-myHp)/40 : 0;
+    var aggr=PM.aggrBase+density*PM.dGain+hpBoost-(highHp?0.3:0);   // [回滚路线A-①] 去掉缺食加成项(实测误判毒海致退化)，恢复减半版；缺食凶抢改由 STARVE 模式负责
     if(aggr<0.3)aggr=0.3;if(aggr>2.4)aggr=2.4;
     var caution=1+crowd*PM.crowdGain;if(caution>PM.crowdMax)caution=PM.crowdMax;
     caution+=persona*0.15;if(caution>PM.crowdMax+0.3)caution=PM.crowdMax+0.3;
@@ -1719,6 +2447,21 @@ const BUILTIN_AIS = {
 
     var multiSnake = aliveN>=3;   // 多蛇期：四合一混战增强生效
     var isEndgameRaw = endgame && myLen>=foe.len;   // 物理上1v1且我不弱(原 ENDGAME 条件)
+
+    // ====== 【模式仲裁器】三套纯人格硬切换（不再加权混合，杜绝路线A 的"两脑互相稀释"）======
+    //   STARVE 纯抢食脑：食物真极缺(eat<=2)或濒死→像FSM一样玩命抢食，围棋脑完全关闭(endgameGain=0)。
+    //   SIEGE  纯围棋脑：1v1+我不弱+成熟→弈强项，数地/分断/minimax 全开收割。
+    //   BRAWL  综合脑  ：其它(混战/标准)→弈现有多源势力图综合脑。
+    //   滞回防抖：进 STARVE 要 eat<=2，退出要 eat>=4(中间3维持原态)，避免毒海(eat在4附近)临界横跳——这正是路线A 用 eat<=4 误判的病根。
+    var eatN = eat.length;
+    var prevMode = self._ysMode || 'BRAWL';
+    var wantStarve = critHp || eatN<=2;            // [回滚v3] 放宽到3未救起高危少食(仍10%)还掉蟠桃,回到eat<=2
+    var stayStarve = prevMode==='STARVE' && eatN<=3 && myHp<70;  // [回滚v3] 滞回回到3
+    var mode;
+    if(wantStarve || stayStarve) mode='STARVE';
+    else if(isEndgameRaw && maturity>=0.45) mode='SIEGE';   // 残局成熟→纯围棋收割
+    else mode='BRAWL';
+    self._ysMode = mode;   // 记忆本回合模式供下回合滞回判断
     // 阶段名(用于离散权重 gCenter/gSafe 等)：1v1 但未成熟(maturity<0.5)仍按 OPENING/MIDGAME 发育
     var phase = (critHp || crowd>=8) ? 'SURVIVAL'
               : (isEndgameRaw && maturity>=0.5) ? 'ENDGAME'        // ← 必须"成熟"才进收官
@@ -1727,13 +2470,22 @@ const BUILTIN_AIS = {
     // endgameGain：围棋大脑总开关，改为"是否1v1 × 成熟度"连续渐开(不再硬跳1.0)
     //   开局1v1 maturity≈0 → 几乎不开，先发育；长大后平滑升到1全功率围杀。
     var endgameGain = isEndgameRaw ? maturity : (phase==='MIDGAME' && !multiSnake ? 0.15*maturity : 0.0);
+    // HP 让步：1v1 时血不够就把"围棋占地"调暗，先去抢食活命(治"忙着数地、食物被对手抢光饿死")
+    //   critHp→围棋几乎关(0.25)；lowHp→减半。吃饱了(HP高)才全功率围杀。
+    var hpGate = critHp ? 0.25 : (lowHp ? 0.5 : 1.0);
+    endgameGain *= hpGate;
+    // 【仲裁器·硬切换】非 SIEGE 模式 → 围棋脑完全关闭(置0)。这样 STARVE/BRAWL 时不会有半点数地分心(取代路线A 的加权打折)。
+    if(mode!=='SIEGE') endgameGain = 0;
     // gFood：发育期猛抢；1v1 收官随 maturity 在 1.2(早期仍抢)↔0.7(成熟收官) 间平滑过渡，不再一进1v1就打7折
     var gFood;
     if(phase==='SURVIVAL') gFood = critHp?1.6:0.8;
     else if(phase==='OPENING') gFood = 1.35;
-    else if(isEndgameRaw) gFood = 1.2 - maturity*0.5;   // maturity0→1.2(发育) ... 1→0.7(收官)
+    else if(isEndgameRaw) gFood = (lowHp?1.5:1.2) - maturity*(lowHp?0.2:0.5);   // 1v1低血抢食地板抬高(1.5→1.3)，别因成熟度跌到0.7
     else gFood = 1.0;
+    // 【仲裁器·STARVE 极致抢食】纯抢食脑：gFood 拉满放大觅食拉力(下方觅食层会乘 gFood)，把"抢食"做到极致。
+    if(mode==='STARVE') gFood = Math.max(gFood, critHp?1.9:1.6);   // [回滚v3] 2.1/1.8→1.9/1.6(v3更猛未见效)
     var gCenter = phase==='OPENING'?1.1  : phase==='ENDGAME'?0.5 : phase==='SURVIVAL'?0.3 : 1.0;
+    if(mode==='STARVE') gCenter *= 0.4;   // 抢食时几乎放弃控场，一切让位给吃
     var gSafe   = phase==='SURVIVAL'?1.6 : 1.0;
 
     // ====== ①④ 多源 BFS 势力图：从我头 + 所有对手头同时泛洪，每格记"我距离"与"最近对手距离" ======
@@ -1749,12 +2501,12 @@ const BUILTIN_AIS = {
         while(qi<q.length){var c=q[qi++],cx=c[0],cy=c[1],cd=foeDist[K(cx,cy)];
           for(var d in D){var nx=cx+D[d].x,ny=cy+D[d].y,k=K(nx,ny);if(!inB(nx,ny)||(blocked[k]&&!tails[k])||foeDist[k]!=null)continue;foeDist[k]=cd+1;q.push([nx,ny]);}}})();
     };
-    if(multiSnake && eat.length) multiBFS();
+    if(eat.length) multiBFS();   // [简化1] 不再仅 multiSnake：1v1 也用多源 BFS(单敌时自动退化为单目标)，以统一觅食、删除 fp1v1
     // 多目标抢食：复用我方带 first 的 BFS，对【所有我领先(lead>0)的食物】按方向聚合分数，
     // 而非只盯单一最优目标——避免唯一目标方向被苟/避碰信号盖掉时整盘不抢食。
     var mcTarget=null, mcBest=-1e9;     // 仍保留"最优单目标"用于参考(主目标加成)
     var mcDirScore={up:0,down:0,left:0,right:0};   // ③ 每个方向的多目标抢食累计分
-    if(multiSnake && eat.length){
+    if(eat.length){   // [简化1] 去掉 multiSnake 门控：1v1 也走同一套多源势力图觅食
       // 带 first 的我方 BFS
       var seen={};seen[K(head.x,head.y)]=true;var q=[{x:head.x,y:head.y,first:null,dist:0}],qi=0;
       var firstOf={};
@@ -1796,13 +2548,7 @@ const BUILTIN_AIS = {
       return {mine:mine, foe:foeC, cuts:cuts};
     };
     var evalEnd=function(myH, foeH, blk){ var t=territory(myH, foeH, blk); return (t.mine - t.foe)*PM.territW + t.cuts*PM.cutW; };
-    // 非多蛇期(1v1/仅2条)的原版 BFS 食物路径，循环外只算一次
-    var fp1v1=null;
-    if(!multiSnake && eat.length){
-      var goalF={};eat.forEach(function(f){goalF[K(f.x,f.y)]=f.type;});var seenF={};seenF[K(head.x,head.y)]=true;var qF=[{x:head.x,y:head.y,first:null,dist:0}],qiF=0;
-      while(qiF<qF.length){var nd=qF[qiF++];for(var dd in D){var nx2=nd.x+D[dd].x,ny2=nd.y+D[dd].y,nk2=K(nx2,ny2);if(seenF[nk2]||!passable(nx2,ny2,true))continue;if(nd.dist===0&&(h2hHard[nk2]||poison[nk2]))continue;seenF[nk2]=true;var fd3=nd.first||dd;
-        if(goalF[nk2]&&!poison[nk2]){fp1v1={dir:fd3,dist:nd.dist+1,type:goalF[nk2]};break;}qF.push({x:nx2,y:ny2,first:fd3,dist:nd.dist+1});}if(fp1v1)break;}
-    }
+    // [简化1] 原 fp1v1 单目标 BFS 已删除——1v1 觅食统一由上方多源势力图(mcTarget/mcDirScore)提供。
     var minimaxEnd=function(myNx,myNy,blk0){
       var blk1={}; for(var k in blk0)blk1[k]=true; blk1[K(myNx,myNy)]=true;
       var worst=1e9, any=false;
@@ -1818,6 +2564,8 @@ const BUILTIN_AIS = {
       return worst;
     };
 
+    // [性能] squeeze 绞杀的对手基线空间在循环外只算一次(每方向相同)，循环内只算"加我方新头后"的一次。仅 SIEGE 残局需要。
+    var foeSpaceBase = (foe && mode==='SIEGE') ? enemyReach(null) : 0;
     var cand=[];
     for(var d in D){if(d===OPP[myDir])continue;var nx=head.x+D[d].x,ny=head.y+D[d].y,nk=K(nx,ny);
       if(!passable(nx,ny,true))continue;
@@ -1828,6 +2576,11 @@ const BUILTIN_AIS = {
       sc+=sp*(W_safe+caution*0.4)*fsmSafe*gSafe;
       if(sp<myLen)sc-=(myLen-sp)*180*(1+persona*0.3);
       if(sp<myLen*0.5)sc-=2500;
+      // [改进二] 相位化空间软门槛(借鉴围猎相位阈值)：身子越长/越成熟，要求的回旋空间越大，防长身后自困。
+      //   复用 maturity(只读)，系数 1.15(发育鼓励钻缝)→1.6(成熟留大回旋)。只罚 [myLen, myLen×系数) 的"够活命但不宽裕"中间带，
+      //   与上面 sp<myLen 硬罚不重叠；sp 充足(>=spaceFloor)则完全不触发，与原行为逐位一致。权重90温和，自困多→升120，变缩头→降60。
+      var spaceFloor = myLen*(1.15 + maturity*0.45);
+      if(sp>=myLen && sp<spaceFloor){ var tight=(spaceFloor-sp)/spaceFloor; sc-=tight*50*(1+persona*0.4); }   // 权重90→50：90太重压得不敢钻缝抢食(高危少食/均衡偏低)，减半找回进攻
       if(openNb(nx,ny)<=1)sc-=160*caution;
       // 头碰头：硬危险重罚；软危险默认躲，但③多蛇期我明显更长+落点安全则反转为"主动吃"奖励
       if(h2hHard[nk])sc-=W_h2h*caution;
@@ -1835,38 +2588,57 @@ const BUILTIN_AIS = {
         if(multiSnake && killHeads[nk] && sp>=myLen) sc+=PM.mcKillW;   // ③ 主动撞短蛇清场
         else sc-=W_h2hSoft*caution;
       }
-      // 觅食：决赛圈/非多蛇用原 bfs 路径逻辑(下方)，多蛇期改用多源势力图目标
-      if(multiSnake){
+      // [简化1] 觅食统一：1v1 与多蛇共用多源势力图(mcDirScore/mcTarget)。1v1 专属调参(hunger1v1/cautEff/tb/W_food)
+      //   通过 !multiSnake 分支保留，行为与原 fp1v1 等价——只是删掉了那套独立 BFS，不改 1v1 觅食强度。
+      {
         // ③ 多目标抢食：对所有"我领先"的食物按方向累计分(不再只认单一目标)
         if(mcDirScore[d]>0) sc += mcDirScore[d]*PM.mcLeadW*gFood;
-        // ①④ 主目标额外加成 + 抢食基础拉力(去掉 0.8 折，发育期靠 gFood 放大反而更猛)
+        // 【STARVE 纯抢食内核】(移植FSM思想)：食物极缺时，朝最优食物方向给一笔压倒性的凶抢分，且距离惩罚几乎归零(够得着就冲)。
+        //   FSM 在缺食时 food 权重飙到 260、distPen→0；这里用 mcTarget 复刻：方向对就猛加、距离不再劝退。仅 STARVE 触发，不影响其它模式。
+        if(mode==='STARVE' && mcTarget && mcTarget.dir===d){
+          sc += (critHp?300:220)*(mcTarget.type==='peach'?1.3:1.0) - mcTarget.dist*0.3;   // 凶抢主力(距离仅轻罚0.3，对齐FSM的distPen≈0)
+        }
+        // ①④ 主目标额外加成 + 抢食基础拉力
         if(mcTarget && mcTarget.dir===d){
           var lead=mcTarget.lead;
           if(lead>0) sc += lead*PM.mcLeadW*0.5*(mcTarget.type==='peach'?1.3:1.0)*gFood;  // 主目标额外半权加成
           else sc -= (-lead)*PM.mcLoseW;   // 抢不赢→轻罚(别去送命)
-          // 抢食基础拉力：原来非低血乘 0.8 削弱了开局，现去掉折扣，完全交给 gFood(发育期1.35)调节
-          var fb2=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.4:PM.foodBase);
-          sc += fb2*aggr/Math.pow(caution,PM.suppress)*fsmFood*gFood - mcTarget.dist*1.0;
+          if(multiSnake){
+            var fb2=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.4:PM.foodBase);
+            sc += fb2*aggr/Math.pow(caution,PM.suppress)*fsmFood*gFood - mcTarget.dist*1.0;
+          }else{
+            // 1v1 专属抢食拉力(原 fp1v1 调参原样移植)：饥饿放大 hunger1v1 + 低血拥挤抑制封顶 cautEff + 桃加成 tb + W_food
+            var fbase=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.6:PM.foodBase);
+            var tb=mcTarget.type==='peach'?1.4:1.0;
+            var hunger1v1=critHp?2.2:(lowHp?1.6:(myHp<80?1.15:1.0));
+            var cautEff=lowHp?Math.min(caution,1.15):caution;
+            sc += fbase*aggr/Math.pow(cautEff,PM.suppress)*fsmFood*tb*W_food*gFood*hunger1v1 - mcTarget.dist*1.2;
+          }
         }
-        // ② 苟到决赛圈：远离蛇群——改为"吃饱了才苟"，按血量渐进。
-        //   HP高(>70)几乎不苟(avoidScale≈0，开局放心抢)；HP越低苟越弱(要抢食保命)；中等偏低且蛇多时最苟。
-        //   avoidScale: HP>70→0；55~70→线性0→1；25~55→1降到0.3(开始要抢食)；<25(critHp)→0(全力抢)
-        var avoidScale = critHp ? 0
-          : (myHp>70 ? 0
-          : (myHp>=55 ? (70-myHp)/15            // 70→0, 55→1
-          : 0.3 + (myHp-25)/30*0.7));           // 55→1, 25→0.3
-        if(avoidScale>0) sc += nearestFoe(nx,ny)*PM.mcAvoidW*avoidScale;
-      }else{
-        // 非多蛇(1v1 或仅2条)：沿用原 BFS 食物路径(循环外已算 fp1v1)
-        if(fp1v1&&fp1v1.dir===d){
-          var fbase=critHp?PM.hungerFood:(lowHp?PM.foodBase*1.6:PM.foodBase);
-          var tb=fp1v1.type==='peach'?1.4:1.0;
-          sc+=fbase*aggr/Math.pow(caution,PM.suppress)*fsmFood*tb*W_food*gFood-fp1v1.dist*1.2;
+        // ② 苟：远离蛇群——"吃饱了才苟"，按血量渐进(HP>70不苟/55~70升/低血降/濒死全力抢)。仅多蛇期 且 非STARVE(极缺时玩命抢,不苟)
+        if(multiSnake && mode!=='STARVE'){
+          var avoidScale = critHp ? 0
+            : (myHp>70 ? 0
+            : (myHp>=55 ? (70-myHp)/15
+            : 0.3 + (myHp-25)/30*0.7));
+          if(avoidScale>0) sc += nearestFoe(nx,ny)*PM.mcAvoidW*avoidScale;
         }
       }
-      for(var fi=0;fi<eat.length;fi++){if(eat[fi].x===nx&&eat[fi].y===ny){sc+=(eat[fi].type==='peach'?70:30)*fsmFood*(lowHp?1.5:1)*W_food*gFood;break;}}
+      // [简化3] "临门一脚"即时奖励：落点正好是食物时给一笔奖励。原值(70/30 × fsmFood × W_food × gFood)与上方势力图
+      //   mcDirScore/mcTarget 抢食拉力重叠(同口食物算两遍)。这里保留"一步到嘴"语义但降权(40/18)、去掉与势力图重复的
+      //   gFood/W_food 缩放——方向拉力已由势力图负责，本段只做"就差这一步"的临门补刀。低血时×1.5保命急食仍保留。
+      for(var fi=0;fi<eat.length;fi++){if(eat[fi].x===nx&&eat[fi].y===ny){sc+=(eat[fi].type==='peach'?40:18)*(lowHp?1.5:1);break;}}
       sc+=(W-(Math.abs(nx-cx0)+Math.abs(ny-cy0)))*W_center*(critHp?0.3:1)*gCenter;
-      if(W_avoid>0 && !multiSnake)sc+=nearestFoe(nx,ny)*3*W_avoid;   // 旧的远离逻辑只在非多蛇(避免和②重复)
+      // [成熟期边缘惩罚] 借 FSM/围猎成熟期 edge 思路，治"长身贴最外墙被平行墙绞杀"(蟠桃14%崩盘的根因)。
+      //   ed=到最近墙距离；身越长(maturity高)越怕贴墙：ed<=2 时按 (3-ed) 阶梯重罚，并乘 maturity——幼年/开阔(ed>=3)完全不罚，
+      //   不影响毒海/正常局；只在长身贴边时把弈往里赶，从源头不给对手平行绞杀的机会。STARVE 急食时减半(别为躲墙饿死)。
+      var ed=Math.min(nx,ny,W-1-nx,H-1-ny);
+      if(ed<=2){
+        var edgePen=(3-ed)*16*maturity*(1+persona*0.3);   // 蛇多(persona)更怕被夹，罚更重
+        if(mode==='STARVE') edgePen*=0.5;                  // 急食时弱化，优先活命
+        sc-=edgePen;
+      }
+      // [简化2] 删除旧 W_avoid 远离逻辑：与多蛇期 avoidScale 功能重叠(原注释已标"避免和②重复")，1v1远离需求弱，统一用 avoidScale。
       if(foe&&myLen>foe.len)sc+=(W-(Math.abs(nx-foe.x)+Math.abs(ny-foe.y)))*0.7*(phase==='ENDGAME'?1.2:1);
       // ====== 围棋式残局博弈：仅决赛圈(1v1)全功率 ======
       if(endgame && sp>=myLen && endgameGain>0){
@@ -1879,6 +2651,21 @@ const BUILTIN_AIS = {
         sc += tr.cuts*PM.cutW*endgameGain;
         if(tr.foe>0 && tr.foe < foe.len*1.1) sc += 500*endgameGain;
         sc += minimaxEnd(nx, ny, blocked)*PM.lookahead*wLook*endgameGain;
+        // [改进三] 残局反封锁下限(克制围猎squeeze)：复用已算的 tr/sp，零额外开销。
+        //   gate: 仅"我领地不占优(tr.mine<=tr.foe)"时才往大空间撤，避免和上面 +500 绝杀对冲(我占优正在收网时不撤)。
+        //   被压到 sp<myLen*1.6 时按缩减程度扣分引导撤退；乘 endgameGain 继承成熟度/hpGate(低血时弱化,优先抢食活命)。权重100，被压死→150，缩头→60。
+        if(tr.mine <= tr.foe && sp < myLen*1.6){ var shrink=(myLen*1.6 - sp)/(myLen*1.6); sc -= shrink*50*endgameGain; }
+        // ====== [主动 squeeze 绞杀] 移植围猎的"封口"杀手锏：弈不只数地，还主动压缩对手活路 ======
+        //   复用已有 enemyReach(extra)(从对手头泛洪、可传我方新头作障碍)=围猎 enemySpace 等价物，零新算子。
+        //   gate: 仅"我占优(tr.mine>tr.foe)且更长且自身安全(sp>=myLen)"时才出击绞杀——与上面反封锁(tr.mine<=tr.foe才撤)严格互斥，
+        //   不占优时撤、占优时压，攻守按"谁占优"切换，绝不同步打架，也绝不为绞杀牺牲生存(围猎同哲学)。
+        if(sp>=myLen && myLen>=foe.len && tr.mine>tr.foe){
+          var ex={}; ex[nk]=true;                       // 我方新头当障碍
+          var foeSpaceAfter = enemyReach(ex);           // 我走这步后对手剩余空间
+          var squeeze = foeSpaceBase - foeSpaceAfter;   // 这一步压缩了对手多少空间(基线循环外已算)
+          if(squeeze>0) sc += squeeze*6*endgameGain;    // 主动封口奖励(越能压缩越想走)
+          if(foeSpaceAfter>0 && foeSpaceAfter < foe.len*1.2) sc += 600*endgameGain;  // 把对手压进比其体长还小的死空间→近绝杀,重奖(对标围猎+450,弈更狠一点)
+        }
       }
       if(d===myDir)sc-=PM.antiPredict;
       cand.push({dir:d,score:sc});
@@ -2401,15 +3188,34 @@ function getFoodWeights(){
   return { bun:g('food-bun',55), peach:g('food-peach',15), spider:g('food-spider',30) };
 }
 // 鲁棒性训练/测试用的极端食物比例集合（域随机化 & 多比例回测共用）
+// 食物比例场景全集(15种)：core=核心6种(日常快测) + ext=扩展9种(精调/定稿全套)。
+//   覆盖三维:总食物量(富/中/缺) × 毒占比(高/中/零) × 价值结构(桃/均衡/包)。鲁棒测试UI可勾选跑哪些。
 const ROBUST_SCENARIOS = [
-  { name:'默认',     w:{bun:55,peach:15,spider:30} },
-  { name:'毒蜘蛛海', w:{bun:10,peach:5, spider:85} },
-  { name:'蟠桃盛宴', w:{bun:10,peach:80,spider:10} },
-  { name:'全是包子', w:{bun:90,peach:5, spider:5}  },
-  { name:'高危少食', w:{bun:20,peach:10,spider:70} },
-  { name:'均衡',     w:{bun:34,peach:33,spider:33} },
+  // —— 核心 6 种 ——
+  { name:'默认',     grp:'core', w:{bun:20,peach:2, spider:1}  },   // 实际默认比例 20:2:1(包子87%)
+  { name:'毒蜘蛛海', grp:'core', w:{bun:10,peach:5, spider:85} },
+  { name:'蟠桃盛宴', grp:'core', w:{bun:10,peach:80,spider:10} },
+  { name:'全是包子', grp:'core', w:{bun:90,peach:5, spider:5}  },
+  { name:'高危少食', grp:'core', w:{bun:20,peach:10,spider:70} },
+  { name:'均衡',     grp:'core', w:{bun:34,peach:33,spider:33} },
+  // —— 扩展 9 种 ——
+  { name:'蟠桃雷区', grp:'ext',  w:{bun:5, peach:50,spider:45} },  // 高价值+高毒共存:贪桃vs避毒
+  { name:'纯净包子', grp:'ext',  w:{bun:70,peach:30,spider:0}  },  // 零毒:纯抢食竞速
+  { name:'饿殍遍野', grp:'ext',  w:{bun:8, peach:2, spider:90} },  // 极限缺食+遍地毒:生存底线
+  { name:'桃毒两极', grp:'ext',  w:{bun:0, peach:50,spider:50} },  // 无包子:高价值vs毒的价值判断
+  { name:'微毒盛宴', grp:'ext',  w:{bun:45,peach:45,spider:10} },  // 富足局:包桃各半少量毒
+  { name:'荆棘求生', grp:'ext',  w:{bun:30,peach:5, spider:65} },  // 中包+极少桃+多毒:缺食稳健觅食
+  { name:'饥馑无毒', grp:'ext',  w:{bun:8, peach:2, spider:0}  },  // 缺食+零毒:隔离纯抢食竞争(原盲区)
+  { name:'包子荆棘', grp:'ext',  w:{bun:55,peach:0, spider:45} },  // 只有普通食+毒,无高价值诱惑
+  { name:'饕餮盛宴', grp:'ext',  w:{bun:50,peach:50,spider:0}  },  // 满地全是能吃的:密集走位不自困
 ];
-// 随机抽一种极端比例（域随机化）
+// 鲁棒测试UI勾选哪些场景(name数组)；空/未设=用核心6种。自动训练回测/域随机化用全集。
+var ROBUST_SELECTED = null;
+function getActiveScenarios(){
+  if(!ROBUST_SELECTED || !ROBUST_SELECTED.length) return ROBUST_SCENARIOS.filter(s=>s.grp==='core');
+  return ROBUST_SCENARIOS.filter(s=>ROBUST_SELECTED.indexOf(s.name)>=0);
+}
+// 随机抽一种比例（域随机化，用全集）
 function randomFoodWeights(){ return ROBUST_SCENARIOS[(Math.random()*ROBUST_SCENARIOS.length)|0].w; }
 // 渲染比例条与百分比文字
 function renderFoodRatio(){
@@ -2446,22 +3252,21 @@ function builtinSrc(fn){
   return body;
 }
 // 内置陪练清单（统一来源，seed 与"补齐缺失"都用它）
+// 内置擂台清单（2026-06-16 精简：15→6 条，删被取代的中间产物与重复基础蛇）。
+// 注意：被移除的蛇函数仍完整保留在 BUILTIN_AIS 中（见 RETIRED_AIS 说明），可随时加回本列表恢复，未丢代码/进化谱系。
 const BUILTIN_LIST = [
-  { name:'🏯棋圣Ω·弈',  pal:0, fn:'genesisGoSagePro' },
-  { name:'🏯棋圣Ω',     pal:3, fn:'genesisGoSage' },
-  { name:'🐉天选Ω+',    pal:1, fn:'genesisApex' },
-  { name:'👑集大成Ω',   pal:4, fn:'genesisOmega' },
-  { name:'🦎变形Ω',     pal:2, fn:'genesisOmegaX' },
-  { name:'🧬新范式G1',  pal:7, fn:'genesisG1' },
-  { name:'🌀双信号G2',  pal:5, fn:'genesisDual2' },
-  { name:'🎯围猎Siege', pal:6, fn:'hunterSiege' },
-  { name:'🤖状态机FSM', pal:3, fn:'hunterFSM' },
-  { name:'👑猎手Pro+',  pal:5, fn:'hunterProPlus' },
-  { name:'🏆猎手Pro',   pal:4, fn:'hunterPro' },
-  { name:'贪心猎手',    pal:0, fn:'greedy' },
-  { name:'稳健生存',    pal:1, fn:'survivor' },
-  { name:'随机漫步',    pal:2, fn:'wanderer' },
+  { name:'🦅猎魂Apex',   pal:6, fn:'apexHunter' },        // 新主力(冠军配方专精蛇)
+  { name:'🐲宗师Grand', pal:4, fn:'grandmaster' },        // 全技能融合+智能残局渐开
+  { name:'🏯棋圣Ω·弈',  pal:0, fn:'genesisGoSagePro' },  // 弈v4(连续权重版)
+  { name:'🎯围猎Siege', pal:6, fn:'hunterSiege' },        // 冠军标杆/固定陪练
+  { name:'🤖状态机FSM', pal:3, fn:'hunterFSM' },          // 亚军标杆/固定陪练
+  { name:'🔍探索先锋',  pal:1, fn:'seekerVanguard' },      // 强力搜索专精(蓝)
+  { name:'👑猎手Pro+',  pal:5, fn:'hunterProPlus' },      // 中上难度陪练
+  { name:'随机漫步',    pal:2, fn:'wanderer' },           // 最弱基线
 ];
+// [已退役·代码保留] 以下函数仍在 BUILTIN_AIS，从擂台清单移除但未删除，可随时加回 BUILTIN_LIST 恢复：
+//   genesisGoSageLegacy(弈旧版·v4已存档)、genesisGoSage(棋圣Ω,被弈取代)、genesisApex(天选Ω+)、genesisOmega(集大成Ω)、genesisOmegaX(变形Ω)、
+//   genesisG1(早期冠军,谱系纪念)、genesisDual2(双信号G2)、hunterPro(猎手Pro,被Pro+覆盖)、greedy(贪心猎手)、survivor(稳健生存)。
 function seedBuiltins(){
   BUILTIN_LIST.forEach(b=>{
     addRoster(b.name, PALETTE[b.pal], builtinSrc(BUILTIN_AIS[b.fn]), BUILTIN_AIS[b.fn]);
@@ -2814,9 +3619,12 @@ function renameSnake(id){
 
 function renderSelectList(){
   const el=document.getElementById('select-list');
+  // 默认勾选四条主力蛇：宗师 / 棋圣 / 围猎 / Apex
+  const DEFAULT_SEL=['宗师','棋圣','围猎','Apex'];
+  const isDefault=r=>DEFAULT_SEL.some(k=>r.name.indexOf(k)>=0);
   el.innerHTML = roster.map(r=>`
     <label class="checkrow">
-      <input type="checkbox" class="sel" value="${r.id}">
+      <input type="checkbox" class="sel" value="${r.id}"${isDefault(r)?' checked':''}>
       <span class="dot" style="background:${r.color}"></span>
       <span class="nm">${escapeHtml(r.name)}</span>
     </label>`).join('') || '<p class="muted">先添加选手</p>';
@@ -3143,17 +3951,35 @@ function diagReportText(d){
 - 抢食：包子 ${d.food.包子} 个，蟠桃 ${d.food.蟠桃} 个，误吃毒蜘蛛 ${d.food.误吃毒蜘蛛} 个，场均吃食 ${d.foodPerGame} 个`;
 }
 
+// 构建本轮批量赛的「对手对照」+「积分榜」上下文，让进化时能横向对比
+function buildCompetitiveContext(focalId){
+  // 积分榜（按积分排序，与右侧榜单一致）
+  const ranked=[...roster].sort((a,b)=> b.points-a.points || b.wins-a.wins);
+  const rankLines=ranked.map((r,i)=>{
+    const mark=(r.id===focalId)?' ◀本蛇':'';
+    return `  ${i+1}. ${r.name}：${r.points}分 / ${r.plays}场 / ${r.wins}胜${mark}`;
+  }).join('\n');
+  // 各对手本轮诊断（含本蛇自己，便于横向比死因）
+  const foeLines=roster.filter(r=>r.diag&&r.diag.plays).map(r=>{
+    const s=summarizeDiag(r);
+    const mark=(r.id===focalId)?'【本蛇】':'';
+    return `  ${mark}${r.name}：胜率${s.winRate} 存活${s.surviveRate} 均长${s.avgLen} 场均吃食${s.foodPerGame} | 死因 撞墙${s.deathBreak.撞墙}/撞自己${s.deathBreak.撞自己}/撞蛇${s.deathBreak.撞蛇}/头碰头${s.deathBreak.头碰头}/困饿${s.deathBreak.困死饿死}`;
+  }).join('\n');
+  return `\n本轮批量赛【积分榜】(积分制 25/14/4/0)：\n${rankLines}\n\n本轮【全体选手对战统计】(横向对比,找出本蛇相对短板)：\n${foeLines}\n`;
+}
+
 // 一键进化：要求 LLM 同时产出 ①改进代码 ②改进意见 ③可复用经验规律（结构化）
-function buildEvolvePrompt(summary, oldCode){
+function buildEvolvePrompt(summary, oldCode, focalId){
   const report = diagReportText(summary);
+  const compCtx = focalId ? buildCompetitiveContext(focalId) : '';
   return SPEC_FOR_LLM + `
 
-【本次任务】下面是一条蛇当前的 move 函数代码，以及它在批量赛中的真实表现。请完成两件事：
-（1）针对性改进代码，重点解决暴露出的弱点（撞墙率高→加强边界规避；头碰头率高→加强对手蛇头预测；困死率高→加强 flood-fill 空间评估；误吃毒多→强化避毒；抢食少→优化 BFS 路径）。在保持稳定前提下尽量提升胜率与存活率。
+【本次任务】下面是一条蛇当前的 move 函数代码、它在批量赛中的真实表现，以及同场所有对手的表现与积分榜。请完成两件事：
+（1）针对性改进代码，重点解决暴露出的弱点（撞墙率高→加强边界规避；头碰头率高→加强对手蛇头预测；困死率高→加强 flood-fill 空间评估；误吃毒多→强化避毒；抢食少→优化 BFS 路径）。**对照其他对手的数据找出本蛇的相对短板**（如某死因明显高于对手、或胜率/积分被甩开的原因），在保持稳定前提下尽量提升胜率与积分排名。
 （2）总结你的分析与经验规律，供人类与后续迭代复用。
 
 ${report}
-
+${compCtx}
 当前代码：
 \`\`\`js
 ${oldCode}
@@ -3602,7 +4428,7 @@ function evolveSnake(id){
   }
   if(!p.diag || !p.diag.plays){ toast('请先让它跑一轮批量赛'); return; }
   const summary=summarizeDiag(p);
-  const prompt=buildEvolvePrompt(summary, p.code);
+  const prompt=buildEvolvePrompt(summary, p.code, p.id);
   // 先关掉诊断报告弹窗，否则它会盖在进化弹窗上面（同 z-index）
   document.getElementById('modal-diag').classList.remove('show');
   showEvolveModal(p, summary, prompt);
@@ -4403,9 +5229,9 @@ function bindEvents(){
     const el=document.getElementById(id); if(el) el.oninput=renderFoodRatio;
   });
   document.getElementById('food-reset').onclick=()=>{
-    document.getElementById('food-bun').value=55;
-    document.getElementById('food-peach').value=15;
-    document.getElementById('food-spider').value=30;
+    document.getElementById('food-bun').value=20;
+    document.getElementById('food-peach').value=2;
+    document.getElementById('food-spider').value=1;
     renderFoodRatio(); toast('已恢复默认食物比例');
   };
   // controls
@@ -4445,6 +5271,9 @@ function bindEvents(){
   document.getElementById('robust-start').onclick=runRobustTest;
   document.getElementById('robust-stop').onclick=()=>{ robustAbort=true; };
   document.getElementById('robust-mode').onchange=syncRobustModeUI;
+  // 食物比例快捷选择
+  var _bc=document.getElementById('robust-scn-core'); if(_bc) _bc.onclick=()=>{ ROBUST_SELECTED=ROBUST_SCENARIOS.filter(s=>s.grp==='core').map(s=>s.name); renderRobustScenarios(); };
+  var _ba=document.getElementById('robust-scn-all'); if(_ba) _ba.onclick=()=>{ ROBUST_SELECTED=ROBUST_SCENARIOS.map(s=>s.name); renderRobustScenarios(); };
   // 自动训练
   document.getElementById('btn-auto-train').onclick=openAutoTrain;
   // ⚡ 极速测试预设：最小参数，无大模型也能秒跑完整流程
@@ -4719,6 +5548,7 @@ function worstCaseWinRate(snakeId, samplesEach, maxTurns){
 
 /* ---------- 鲁棒性测试面板 ---------- */
 let robustBusy=false, robustAbort=false;
+var ROBUST_LAST_SCN=null;   // 上次测试用的场景子集(供结果表头取列名)
 // 填充 3 个固定陪练下拉(默认优先选最强的内置蛇)
 function fillRobustFoeSelects(){
   const sels=['robust-foe1','robust-foe2','robust-foe3'].map(id=>document.getElementById(id));
@@ -4732,7 +5562,28 @@ function fillRobustFoeSelects(){
   roster.slice().sort((a,b)=>{const wa=a.plays?a.wins/a.plays:0,wb=b.plays?b.wins/b.plays:0;return wb-wa;}).forEach(r=>{ if(pick.length<3&&!pick.includes(r.id))pick.push(r.id); });
   sels.forEach((sel,i)=>{ sel.innerHTML=opts; if(pick[i]) sel.value=pick[i]; });
 }
-function openRobust(){ fillRobustFoeSelects(); syncRobustModeUI(); document.getElementById('modal-robust').classList.add('show'); }
+// 渲染食物比例勾选区(核心default勾选,扩展default不勾)
+function renderRobustScenarios(){
+  const box=document.getElementById('robust-scn-list'); if(!box) return;
+  if(!ROBUST_SELECTED) ROBUST_SELECTED=ROBUST_SCENARIOS.filter(s=>s.grp==='core').map(s=>s.name);
+  box.innerHTML=ROBUST_SCENARIOS.map(s=>{
+    const on=ROBUST_SELECTED.indexOf(s.name)>=0;
+    const tag=s.grp==='ext'?'<span style="color:var(--muted);font-size:10px;">·扩</span>':'';
+    return '<label style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;">'
+      +'<input type="checkbox" class="robust-scn-cb" value="'+s.name+'"'+(on?' checked':'')+'>'+escapeHtml(s.name)+tag+'</label>';
+  }).join('');
+  box.querySelectorAll('.robust-scn-cb').forEach(cb=>cb.onchange=()=>{
+    ROBUST_SELECTED=Array.from(box.querySelectorAll('.robust-scn-cb:checked')).map(c=>c.value);
+    updateRobustScnCount();
+  });
+  updateRobustScnCount();
+}
+function updateRobustScnCount(){
+  const el=document.getElementById('robust-scn-count'); if(!el) return;
+  const n=(ROBUST_SELECTED||[]).length;
+  el.textContent='已选 '+n+' 种'+(n===0?'（未选=默认核心6种）':'');
+}
+function openRobust(){ fillRobustFoeSelects(); renderRobustScenarios(); syncRobustModeUI(); document.getElementById('modal-robust').classList.add('show'); }
 function syncRobustModeUI(){
   const mode=document.getElementById('robust-mode').value;
   document.getElementById('robust-foes-row').style.display = mode==='fixed' ? '' : 'none';
@@ -4761,9 +5612,11 @@ async function runRobustTest(){
   robustBusy=true;
   document.getElementById('robust-start').disabled=true;
   const stopBtn=document.getElementById('robust-stop'); if(stopBtn) stopBtn.style.display='';
-  const rate=ROBUST_SCENARIOS.map(()=>({}));
+  const SCN=getActiveScenarios();   // 用 UI 勾选的场景子集(空=核心6种)
+  ROBUST_LAST_SCN=SCN;              // 供 renderRobustResult 取列名
+  const rate=SCN.map(()=>({}));
   // 总场数(用于进度) & 计时
-  const totalGames = ROBUST_SCENARIOS.length * (mode==='fixed'? ids.length : 1) * N;
+  const totalGames = SCN.length * (mode==='fixed'? ids.length : 1) * N;
   let doneGames=0; const t0=Date.now();
   const tick=async(label)=>{
     const pct=Math.round(100*doneGames/totalGames);
@@ -4772,8 +5625,8 @@ async function runRobustTest(){
     await new Promise(r=>setTimeout(r,0));   // 每场都让渡，UI 不卡
   };
   try{
-    for(let si=0; si<ROBUST_SCENARIOS.length && !robustAbort; si++){
-      const sc=ROBUST_SCENARIOS[si];
+    for(let si=0; si<SCN.length && !robustAbort; si++){
+      const sc=SCN[si];
       if(mode==='fixed'){
         // 对照陪练：每条被测蛇分别 vs 3 固定对手，单独凑 4 蛇混战
         for(const tid of ids){
@@ -4828,7 +5681,8 @@ function renderRobustResult(ids, rate, doneCount){
   let html='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
   html+='<tr style="text-align:left;color:var(--muted);border-bottom:1px solid var(--border);">'
     +'<th style="padding:4px;">蛇</th>';
-  for(let si=0; si<doneCount; si++) html+='<th style="padding:4px;text-align:center;">'+ROBUST_SCENARIOS[si].name+'</th>';
+  var _scn=ROBUST_LAST_SCN||getActiveScenarios();
+  for(let si=0; si<doneCount; si++) html+='<th style="padding:4px;text-align:center;">'+(_scn[si]?_scn[si].name:('比例'+(si+1)))+'</th>';
   html+='<th style="padding:4px;text-align:center;color:var(--accent2);">最差</th><th style="padding:4px;text-align:center;">波动</th></tr>';
   stat.forEach((s,idx)=>{
     html+='<tr style="border-bottom:1px solid var(--border);'+(idx===0?'background:rgba(45,212,191,.08);':'')+'">';
